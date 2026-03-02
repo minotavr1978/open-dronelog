@@ -1273,6 +1273,20 @@ async fn sync_single_file(
         }
     }
 
+    // Insert notes from re-imported CSV exports
+    if let Some(ref notes) = parse_result.notes {
+        if let Err(e) = state.db.update_flight_notes(flight_id, Some(notes.as_str())) {
+            log::warn!("Failed to insert notes: {}", e);
+        }
+    }
+
+    // Insert app messages (tips and warnings) from DJI logs
+    if !parse_result.messages.is_empty() {
+        if let Err(e) = state.db.insert_flight_messages(flight_id, &parse_result.messages) {
+            log::warn!("Failed to insert messages: {}", e);
+        }
+    }
+
     Ok(Json(SyncFileResponse {
         success: true,
         message: "OK".to_string(),
