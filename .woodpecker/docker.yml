@@ -1,0 +1,20 @@
+when:
+  - event: push
+    branch: main
+  - event: tag
+
+steps:
+  # Build and push Docker image
+  - name: build-and-push
+    image: woodpeckerci/plugin-docker-buildx
+    settings:
+      registry: codeberg.org
+      repo: "codeberg.org/${CI_REPO_OWNER}/open-dronelog"
+      username:
+        from_secret: codeberg_username
+      password:
+        from_secret: codeberg_token
+      platforms: linux/amd64,linux/arm64
+      auto_tag: true
+      dockerfile: Dockerfile
+      context: .
