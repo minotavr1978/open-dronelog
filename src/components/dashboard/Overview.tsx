@@ -45,6 +45,7 @@ export function Overview({ stats, flights, unitSystem, onSelectFlight }: Overvie
   const { t } = useTranslation();
   const locale = useFlightStore((state) => state.locale);
   const dateLocale = useFlightStore((state) => state.dateLocale);
+  const timeFormat = useFlightStore((state) => state.timeFormat);
   const themeMode = useFlightStore((state) => state.themeMode);
   const getBatteryDisplayName = useFlightStore((state) => state.getBatteryDisplayName);
   const renameBattery = useFlightStore((state) => state.renameBattery);
@@ -385,7 +386,7 @@ export function Overview({ stats, flights, unitSystem, onSelectFlight }: Overvie
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-white truncate">{flight.displayName}</p>
-                    <p className="text-xs text-gray-400">{formatDateTime(flight.startTime, dateLocale)}</p>
+                    <p className="text-xs text-gray-400">{formatDateTime(flight.startTime, dateLocale, timeFormat !== '24h')}</p>
                   </div>
                   <div className="text-sm font-medium text-drone-accent">
                     {formatDuration(flight.durationSecs)}
@@ -419,7 +420,7 @@ export function Overview({ stats, flights, unitSystem, onSelectFlight }: Overvie
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm text-white truncate">{flight.displayName}</p>
-                      <p className="text-xs text-gray-400">{formatDateTime(flight.startTime, dateLocale)}</p>
+                      <p className="text-xs text-gray-400">{formatDateTime(flight.startTime, dateLocale, timeFormat !== '24h')}</p>
                     </div>
                     <div className="text-sm font-medium text-drone-accent">
                       {formatDistance(flight.maxDistanceFromHomeM, unitSystem, locale)}
@@ -1179,7 +1180,7 @@ function DroneFlightTimeList({
                     {drone.droneSerial && (
                       <button
                         onClick={() => handleStartRename(drone.droneSerial!, fallbackName)}
-                        className="p-0.5 text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                        className="p-0.5 text-sky-400 flex-shrink-0"
                         title={t('overview.renameDrone')}
                       >
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1612,7 +1613,7 @@ function BatteryHealthList({
                     <span className="truncate">{displayName}</span>
                     <button
                       onClick={() => handleStartRename(battery.batterySerial)}
-                      className="p-0.5 text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                      className="p-0.5 text-sky-400 flex-shrink-0"
                       title={t('overview.renameBattery')}
                     >
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

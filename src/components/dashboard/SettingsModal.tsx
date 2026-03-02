@@ -2,7 +2,7 @@
  * Settings modal for API key configuration
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useTransition } from 'react';
 import { useTranslation } from 'react-i18next';
 import { sha256 as jsSha256 } from 'js-sha256';
 import * as api from '@/lib/api';
@@ -51,6 +51,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     setAppLanguage,
     themeMode,
     setThemeMode,
+    timeFormat,
+    setTimeFormat,
     loadFlights,
     loadOverview,
     clearSelection,
@@ -72,6 +74,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     hideSerialNumbers,
     setHideSerialNumbers,
   } = useFlightStore();
+
+  // Local state so the dropdown responds instantly; store update is deferred via startTransition
+  const [localTimeFormat, setLocalTimeFormat] = useState<'12h' | '24h'>(timeFormat);
+  const [isTimeFormatPending, startTimeFormatTransition] = useTransition();
 
   const [showBadgeModal, setShowBadgeModal] = useState(false);
   const [badgeCode, setBadgeCode] = useState('');
@@ -398,6 +404,32 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     { value: 'system', label: t('settings.system') },
                     { value: 'dark', label: t('settings.dark') },
                     { value: 'light', label: t('settings.light') },
+                  ]}
+                />
+              </div>
+              <div className="flex flex-col gap-1 flex-1">
+                <label className="text-xs font-medium text-gray-400 flex items-center gap-1.5">
+                  {t('settings.timeFormat', 'Time Format')}
+                  {isTimeFormatPending && (
+                    <svg className="w-3 h-3 animate-spin text-drone-primary" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+                      <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-75" />
+                    </svg>
+                  )}
+                </label>
+                <Select
+                  value={localTimeFormat}
+                  onChange={(v) => {
+                    const fmt = v as '12h' | '24h';
+                    setLocalTimeFormat(fmt);
+                    // Yield the paint thread first, then commit to store
+                    setTimeout(() => {
+                      startTimeFormatTransition(() => setTimeFormat(fmt));
+                    }, 0);
+                  }}
+                  options={[
+                    { value: '12h', label: '12-hour' },
+                    { value: '24h', label: '24-hour' },
                   ]}
                 />
               </div>

@@ -74,19 +74,26 @@ export function formatAltitude(
   return `${fmtNum(meters, 1, locale)} m`;
 }
 
+/** Ensure AM/PM tokens are always uppercase (some locales produce lowercase) */
+export function ensureAmPmUpperCase(s: string): string {
+  return s.replace(/\b(am|pm)\b/gi, (m) => m.toUpperCase());
+}
+
 /** Format date string to locale date/time */
-export function formatDateTime(dateStr: string | null, locale?: string): string {
+export function formatDateTime(dateStr: string | null, locale?: string, hour12?: boolean): string {
   if (!dateStr) return 'Unknown date';
   
   try {
     const date = new Date(dateStr);
-    return date.toLocaleString(locale, {
+    const result = date.toLocaleString(locale, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+      ...(hour12 !== undefined ? { hour12 } : {}),
     });
+    return ensureAmPmUpperCase(result);
   } catch {
     return dateStr;
   }

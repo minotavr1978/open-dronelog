@@ -130,6 +130,7 @@ export function FlightList({
     locale,
     dateLocale,
     themeMode,
+    timeFormat,
     getBatteryDisplayName,
     getDroneDisplayName,
     droneNameMap,
@@ -155,6 +156,7 @@ export function FlightList({
     ? (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
     : themeMode;
   const isLight = resolvedTheme === 'light';
+  const hour12 = timeFormat !== '24h';
   const heatmapDateFilter = useFlightStore((s) => s.heatmapDateFilter);
   const setHeatmapDateFilter = useFlightStore((s) => s.setHeatmapDateFilter);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -1128,6 +1130,7 @@ export function FlightList({
         unitSystem,
         locale,
         dateLocale,
+        timeFormat,
       });
 
       if (isWebMode()) {
@@ -2525,7 +2528,7 @@ export function FlightList({
                   }}
                   title={[
                     flight.displayName || flight.fileName,
-                    `Start: ${formatDateTime(flight.startTime, dateLocale)}`,
+                    `Start: ${formatDateTime(flight.startTime, dateLocale, hour12)}`,
                     `Duration: ${formatDuration(flight.durationSecs)}`,
                     `Distance: ${formatDistance(flight.totalDistance, unitSystem, locale)}`,
                     `Max Altitude: ${formatAltitude(flight.maxAltitude, unitSystem, locale)}`,
@@ -2564,7 +2567,7 @@ export function FlightList({
             {/* Subtitle: date + duration */}
             {editingId !== flight.id && (
               <p className="text-xs text-gray-500 mt-0.5 truncate">
-                {formatDateTime(flight.startTime, dateLocale)}
+                {formatDateTime(flight.startTime, dateLocale, hour12)}
                 {flight.durationSecs ? ` · ${formatDuration(flight.durationSecs)}` : ''}
                 {flight.totalDistance ? ` · ${formatDistance(flight.totalDistance, unitSystem, locale)}` : ''}
               </p>

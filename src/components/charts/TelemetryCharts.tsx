@@ -9,6 +9,7 @@ import ReactECharts from 'echarts-for-react';
 import type { EChartsOption, ECharts, LineSeriesOption } from 'echarts';
 import type { TelemetryData } from '@/types';
 import type { UnitSystem } from '@/lib/utils';
+import { ensureAmPmUpperCase } from '@/lib/utils';
 import { useFlightStore } from '@/stores/flightStore';
 import { useTranslation } from 'react-i18next';
 
@@ -603,14 +604,15 @@ export function TelemetryCharts({ data, unitSystem, startTime }: TelemetryCharts
   const isSyncingRef = useRef(false);
   const themeMode = useFlightStore((state) => state.themeMode);
   const locale = useFlightStore((state) => state.locale);
+  const timeFormat = useFlightStore((state) => state.timeFormat);
   const mapSyncEnabled = useFlightStore((state) => state.mapSyncEnabled);
   const setMapSyncEnabled = useFlightStore((state) => state.setMapSyncEnabled);
   const mapReplayProgress = useFlightStore((state) => state.mapReplayProgress);
   const resolvedTheme = useMemo(() => resolveThemeMode(themeMode), [themeMode]);
   const splitLineColor = resolvedTheme === 'light' ? '#e2e8f0' : '#2a2a4e';
   const tooltipFormatter = useMemo(
-    () => createTooltipFormatter(startTime ?? null, resolvedTheme, locale),
-    [resolvedTheme, startTime, locale]
+    () => createTooltipFormatter(startTime ?? null, resolvedTheme, locale, timeFormat !== '24h'),
+    [resolvedTheme, startTime, locale, timeFormat]
   );
   const tooltipColors = useMemo(
     () =>
@@ -2205,7 +2207,8 @@ type TooltipColors = {
 function createTooltipFormatter(
   startTime: string | null,
   theme: 'light' | 'dark',
-  locale?: string
+  locale?: string,
+  hour12?: boolean
 ): TooltipFormatter {
   return (params) => {
     const items = Array.isArray(params) ? params : [params];
@@ -2214,7 +2217,7 @@ function createTooltipFormatter(
       typeof axisValue === 'number'
         ? axisValue
         : Number.parseFloat(String(axisValue));
-    const header = formatTooltipHeader(startTime, seconds, theme, locale);
+    const header = formatTooltipHeader(startTime, seconds, theme, locale, hour12);
 
     const lines = items.map((item) => {
       const marker = typeof item.marker === 'string' ? item.marker : '';
@@ -2238,7 +2241,8 @@ function formatTooltipHeader(
   startTime: string | null,
   seconds: number,
   theme: 'light' | 'dark',
-  locale?: string
+  locale?: string,
+  hour12 = true,
 ): string {
   const safeSeconds = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
   const durationLabel = formatDurationLabel(safeSeconds);
@@ -2247,11 +2251,11 @@ function formatTooltipHeader(
   }
   const startDate = new Date(startTime);
   const timestamp = new Date(startDate.getTime() + safeSeconds * 1000);
-  const timeLabel = new Intl.DateTimeFormat(locale, {
+  const timeLabel = ensureAmPmUpperCase(new Intl.DateTimeFormat(locale, {
     hour: '2-digit',
     minute: '2-digit',
-    hour12: true,
-  }).format(timestamp);
+    hour12,
+  }).format(timestamp));
   const durationBg = theme === 'light' ? 'rgba(15, 23, 42, 0.08)' : 'rgba(0,212,170,0.2)';
   const timeBg = theme === 'light' ? 'rgba(2, 132, 199, 0.12)' : 'rgba(0,160,220,0.22)';
   const textColor = theme === 'light' ? '#0f172a' : '#e2e8f0';

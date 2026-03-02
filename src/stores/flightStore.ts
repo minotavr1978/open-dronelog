@@ -64,6 +64,8 @@ interface FlightState {
   setDateLocale: (dateLocale: string) => void;
   appLanguage: string;
   setAppLanguage: (lang: string) => void;
+  timeFormat: '12h' | '24h';
+  setTimeFormat: (format: '12h' | '24h') => void;
   setUnitSystem: (unitSystem: 'metric' | 'imperial') => void;
   setThemeMode: (themeMode: 'system' | 'dark' | 'light') => void;
   setDonationAcknowledged: (value: boolean) => void;
@@ -164,6 +166,11 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     (typeof localStorage !== 'undefined' &&
       localStorage.getItem('appLanguage')) ||
     'en',
+  timeFormat: (() => {
+    if (typeof localStorage === 'undefined') return '12h';
+    const stored = localStorage.getItem('timeFormat');
+    return stored === '12h' || stored === '24h' ? stored : '12h';
+  })() as '12h' | '24h',
   unitSystem:
     (typeof localStorage !== 'undefined' &&
       (localStorage.getItem('unitSystem') as 'metric' | 'imperial')) ||
@@ -706,6 +713,13 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     }
     i18n.changeLanguage(lang);
     set({ appLanguage: lang });
+  },
+
+  setTimeFormat: (format) => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('timeFormat', format);
+    }
+    set({ timeFormat: format });
   },
 
   setUnitSystem: (unitSystem) => {
