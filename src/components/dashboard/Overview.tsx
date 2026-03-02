@@ -1180,7 +1180,7 @@ function DroneFlightTimeList({
                     {drone.droneSerial && (
                       <button
                         onClick={() => handleStartRename(drone.droneSerial!, fallbackName)}
-                        className="p-0.5 text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                        className="p-0.5 text-sky-400 flex-shrink-0"
                         title={t('overview.renameDrone')}
                       >
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1613,7 +1613,7 @@ function BatteryHealthList({
                     <span className="truncate">{displayName}</span>
                     <button
                       onClick={() => handleStartRename(battery.batterySerial)}
-                      className="p-0.5 text-sky-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                      className="p-0.5 text-sky-400 flex-shrink-0"
                       title={t('overview.renameBattery')}
                     >
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
