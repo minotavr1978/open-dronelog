@@ -980,7 +980,7 @@ export function TelemetryCharts({ data, unitSystem, startTime }: TelemetryCharts
           unitSystem={unitSystem}
           theme={resolvedTheme}
         />
-        <div className="h-64">
+        <div className={`h-64${mapSyncEnabled ? ' pointer-events-none' : ''}`}>
           <ReactECharts
             option={altitudeSpeedOption}
             style={{ height: '100%', width: '100%' }}
@@ -1000,7 +1000,7 @@ export function TelemetryCharts({ data, unitSystem, startTime }: TelemetryCharts
           unitSystem={unitSystem}
           theme={resolvedTheme}
         />
-        <div className="h-60">
+        <div className={`h-60${mapSyncEnabled ? ' pointer-events-none' : ''}`}>
           <ReactECharts
             option={batteryOption}
             style={{ height: '100%', width: '100%' }}
@@ -1021,7 +1021,7 @@ export function TelemetryCharts({ data, unitSystem, startTime }: TelemetryCharts
             unitSystem={unitSystem}
             theme={resolvedTheme}
           />
-          <div className="h-52">
+          <div className={`h-52${mapSyncEnabled ? ' pointer-events-none' : ''}`}>
             <ReactECharts
               option={cellVoltageOption}
               style={{ height: '100%', width: '100%' }}
@@ -1042,7 +1042,7 @@ export function TelemetryCharts({ data, unitSystem, startTime }: TelemetryCharts
           unitSystem={unitSystem}
           theme={resolvedTheme}
         />
-        <div className="h-64">
+        <div className={`h-64${mapSyncEnabled ? ' pointer-events-none' : ''}`}>
           <ReactECharts
             option={attitudeOption}
             style={{ height: '100%', width: '100%' }}
@@ -1062,7 +1062,7 @@ export function TelemetryCharts({ data, unitSystem, startTime }: TelemetryCharts
           unitSystem={unitSystem}
           theme={resolvedTheme}
         />
-        <div className="h-40">
+        <div className={`h-40${mapSyncEnabled ? ' pointer-events-none' : ''}`}>
           <ReactECharts
             option={rcSignalOption}
             style={{ height: '100%', width: '100%' }}
@@ -1082,7 +1082,7 @@ export function TelemetryCharts({ data, unitSystem, startTime }: TelemetryCharts
           unitSystem={unitSystem}
           theme={resolvedTheme}
         />
-        <div className="h-52">
+        <div className={`h-52${mapSyncEnabled ? ' pointer-events-none' : ''}`}>
           <ReactECharts
             option={distanceToHomeOption}
             style={{ height: '100%', width: '100%' }}
@@ -1102,7 +1102,7 @@ export function TelemetryCharts({ data, unitSystem, startTime }: TelemetryCharts
           unitSystem={unitSystem}
           theme={resolvedTheme}
         />
-        <div className="h-52">
+        <div className={`h-52${mapSyncEnabled ? ' pointer-events-none' : ''}`}>
           <ReactECharts
             option={velocityOption}
             style={{ height: '100%', width: '100%' }}
@@ -1122,7 +1122,7 @@ export function TelemetryCharts({ data, unitSystem, startTime }: TelemetryCharts
           unitSystem={unitSystem}
           theme={resolvedTheme}
         />
-        <div className="h-[207px]">
+        <div className={`h-[207px]${mapSyncEnabled ? ' pointer-events-none' : ''}`}>
           <ReactECharts
             option={gpsOption}
             style={{ height: '100%', width: '100%' }}
@@ -1172,8 +1172,7 @@ function createBaseChartConfig(theme: 'dark' | 'light'): Partial<EChartsOption> 
     tooltip: {
       trigger: 'axis',
       renderMode: 'html',
-      appendToBody: true,
-      extraCssText: 'z-index: 40;',
+      confine: true,
       backgroundColor: isLight ? '#ffffff' : '#16213e',
       borderColor: isLight ? '#e2e8f0' : '#4a4e69',
       textStyle: {
