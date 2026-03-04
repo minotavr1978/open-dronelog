@@ -551,7 +551,7 @@ export function Dashboard() {
                             />
                           </svg>
                           {/* Red badge with count */}
-                          <span className="absolute -top-1 -right-1 min-w-[19px] h-[19px] px-0.5 flex items-center justify-center rounded-full bg-red-600 text-white text-[11px] font-bold leading-none border border-drone-dark">
+                          <span className="absolute -top-1 -right-1 min-w-[19px] h-[19px] px-0.5 flex items-center justify-center rounded-full bg-red-600 text-white msg-badge-count text-[11px] font-bold leading-none border border-drone-dark">
                             {currentFlightData.messages.length > 99 ? '99+' : currentFlightData.messages.length}
                           </span>
                         </button>

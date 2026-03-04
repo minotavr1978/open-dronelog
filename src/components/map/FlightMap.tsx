@@ -207,101 +207,49 @@ const ARROW_ICON_URL = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(AR
 
 /* ─── Directional arrow stick widget ────────────────────────────── */
 
-interface StickArrowsProps {
-  up: number;      // 0-100
-  down: number;    // 0-100
-  left: number;    // 0-100
-  right: number;   // 0-100
+interface RCStickPadProps {
+  /** Horizontal axis value, -100 (left) to +100 (right) */
+  x: number;
+  /** Vertical axis value, -100 (down) to +100 (up) */
+  y: number;
+  /** Label shown inside the pad */
+  label: string;
+  /** Position of the label: bottom-left or bottom-right */
+  labelPosition: 'bl' | 'br';
+  /** Tailwind color class for the dot (bg-*) */
+  dotColor: string;
+  /** Tailwind shadow glow class */
+  dotGlow: string;
 }
 
 /**
- * Renders a compact cross of 4 directional bar indicators.
- * Each bar progressively fills from the center outward to show stick force.
+ * Renders a joystick-style pad: a rounded square with crosshair lines
+ * and a coloured dot whose position reflects the stick deflection.
  */
-function StickArrows({ up, down, left, right }: StickArrowsProps) {
-  const clamp = (v: number) => Math.min(100, Math.max(0, v));
-  const pct = { up: clamp(up), down: clamp(down), left: clamp(left), right: clamp(right) };
+function RCStickPad({ x, y, label, labelPosition, dotColor, dotGlow }: RCStickPadProps) {
+  // Clamp to -100..+100 range
+  const cx = Math.min(100, Math.max(-100, x));
+  const cy = Math.min(100, Math.max(-100, y));
 
-  const BAR_LEN = 21; // max bar length in px
-  const BAR_W = 4;    // bar thickness
-
-  // Color ramp: uses CSS custom properties so light mode can override
-  const barColor = (val: number) => {
-    if (val < 2) return 'transparent';
-    const t = val / 100;
-    return `color-mix(in srgb, var(--stick-bar-active) ${Math.round(70 + 30 * t)}%, transparent)`;
-  };
-
-  const barShadow = (val: number) => {
-    if (val < 5) return 'none';
-    const t = val / 100;
-    return `0 0 ${3 + 6 * t}px var(--stick-bar-glow)`;
-  };
-
-  // Vertical bar (up or down from center) with a visible track behind it
-  const VBar = ({ value, direction }: { value: number; direction: 'up' | 'down' }) => {
-    const len = (clamp(value) / 100) * BAR_LEN;
-    return (
-      <div className="flex items-center justify-center" style={{ width: BAR_W, height: BAR_LEN, position: 'relative' }}>
-        {/* Track / rail — always visible */}
-        <div className="stick-bar-track" style={{ position: 'absolute', width: BAR_W, height: BAR_LEN, borderRadius: 2 }} />
-        {/* Active fill */}
-        <div
-          style={{
-            position: 'relative',
-            width: BAR_W,
-            height: len,
-            borderRadius: 2,
-            background: barColor(value),
-            boxShadow: barShadow(value),
-            transition: 'height 60ms ease-out, background 60ms ease-out',
-            [direction === 'up' ? 'marginTop' : 'marginBottom']: 'auto',
-          }}
-        />
-      </div>
-    );
-  };
-
-  // Horizontal bar (left or right from center) with a visible track behind it
-  const HBar = ({ value, direction }: { value: number; direction: 'left' | 'right' }) => {
-    const len = (clamp(value) / 100) * BAR_LEN;
-    return (
-      <div className="flex items-center" style={{ width: BAR_LEN, height: BAR_W, justifyContent: direction === 'left' ? 'flex-end' : 'flex-start', position: 'relative' }}>
-        {/* Track / rail — always visible */}
-        <div className="stick-bar-track" style={{ position: 'absolute', width: BAR_LEN, height: BAR_W, borderRadius: 2 }} />
-        {/* Active fill */}
-        <div
-          style={{
-            position: 'relative',
-            width: len,
-            height: BAR_W,
-            borderRadius: 2,
-            background: barColor(value),
-            boxShadow: barShadow(value),
-            transition: 'width 60ms ease-out, background 60ms ease-out',
-          }}
-        />
-      </div>
-    );
-  };
+  const labelPosClass = labelPosition === 'bl'
+    ? 'bottom-0.5 left-1'
+    : 'bottom-0.5 right-1';
 
   return (
-    <div className="flex items-center justify-center">
-      <div className="grid grid-cols-3 grid-rows-3 place-items-center" style={{ width: 56, height: 60 }}>
-        {/* row 1 */}
-        <div />
-        <VBar value={pct.up} direction="up" />
-        <div />
-        {/* row 2 */}
-        <HBar value={pct.left} direction="left" />
-        {/* center dot */}
-        <div className="w-[5px] h-[5px] rounded-full stick-center-dot" />
-        <HBar value={pct.right} direction="right" />
-        {/* row 3 */}
-        <div />
-        <VBar value={pct.down} direction="down" />
-        <div />
-      </div>
+    <div className="rc-stick-pad w-14 h-14 rounded-lg bg-gray-800/80 border border-gray-600/50 relative">
+      {/* Label badge */}
+      <span className={`absolute ${labelPosClass} text-[9px] font-bold rc-stick-label leading-none select-none z-10`}>{label}</span>
+      {/* Crosshairs */}
+      <div className="absolute left-1/2 top-0 bottom-0 w-px rc-stick-crosshair" />
+      <div className="absolute top-1/2 left-0 right-0 h-px rc-stick-crosshair" />
+      {/* Stick position dot */}
+      <div
+        className={`absolute w-3 h-3 rounded-full ${dotColor} shadow-lg ${dotGlow} -translate-x-1/2 -translate-y-1/2 transition-all duration-75`}
+        style={{
+          left: `${50 + cx / 2}%`,
+          top: `${50 - cy / 2}%`,
+        }}
+      />
     </div>
   );
 }
@@ -1706,20 +1654,24 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
 
           {/* RC Stick Overlay — above the playbar */}
           {replayActive && showTooltip && replayTelemetry && (replayTelemetry.rcAileron !== null || replayTelemetry.rcThrottle !== null) && (
-            <div className="rc-stick-overlay flex items-center justify-between rounded-xl px-5 py-3 pointer-events-none">
-              {/* Left Stick — Throttle + Rudder */}
-              <StickArrows
-                up={Math.max(0, replayTelemetry.rcThrottle ?? 0)}
-                down={Math.max(0, -(replayTelemetry.rcThrottle ?? 0))}
-                left={Math.max(0, -(replayTelemetry.rcRudder ?? 0))}
-                right={Math.max(0, replayTelemetry.rcRudder ?? 0)}
+            <div className="flex items-center justify-center gap-3 pointer-events-none mb-1">
+              {/* Left Stick — Throttle (Y) + Rudder (X) */}
+              <RCStickPad
+                x={replayTelemetry.rcRudder ?? 0}
+                y={replayTelemetry.rcThrottle ?? 0}
+                label="L"
+                labelPosition="bl"
+                dotColor="bg-drone-accent"
+                dotGlow="shadow-drone-accent/50"
               />
-              {/* Right Stick — Elevator + Aileron */}
-              <StickArrows
-                up={Math.max(0, replayTelemetry.rcElevator ?? 0)}
-                down={Math.max(0, -(replayTelemetry.rcElevator ?? 0))}
-                left={Math.max(0, -(replayTelemetry.rcAileron ?? 0))}
-                right={Math.max(0, replayTelemetry.rcAileron ?? 0)}
+              {/* Right Stick — Elevator (Y) + Aileron (X) */}
+              <RCStickPad
+                x={replayTelemetry.rcAileron ?? 0}
+                y={replayTelemetry.rcElevator ?? 0}
+                label="R"
+                labelPosition="br"
+                dotColor="bg-drone-primary"
+                dotGlow="shadow-drone-primary/50"
               />
             </div>
           )}

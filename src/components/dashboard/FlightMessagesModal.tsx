@@ -84,7 +84,7 @@ export function FlightMessagesModal({
       {/* Modal panel */}
       <div
         ref={modalRef}
-        className="relative z-10 w-full max-w-lg bg-drone-dark border border-gray-700 rounded-2xl shadow-2xl flex flex-col max-h-[80vh]"
+        className="flight-messages-modal relative z-10 w-full max-w-lg bg-drone-dark border border-gray-700 rounded-2xl shadow-2xl flex flex-col max-h-[80vh]"
         role="dialog"
         aria-modal="true"
         aria-label={t('map.messages')}
@@ -114,7 +114,7 @@ export function FlightMessagesModal({
           {/* Summary badges */}
           <div className="flex items-center gap-2">
             {cautionCount > 0 && (
-              <span className="inline-flex items-center gap-1.5 text-[13px] font-medium px-2.5 py-1 rounded-full bg-red-500/15 text-red-400 border border-red-500/30">
+              <span className="inline-flex items-center gap-1.5 text-[13px] font-medium px-2.5 py-1 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 msg-badge-count">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -154,13 +154,13 @@ export function FlightMessagesModal({
 
         {/* Column labels */}
         <div className="grid grid-cols-[56px_48px_1fr] sm:grid-cols-[72px_64px_1fr] gap-x-2 sm:gap-x-3 px-3 sm:px-5 py-2 border-b border-gray-700/50 flex-shrink-0">
-          <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500 msg-col-label">
             {t('dashboard.messagesColTime')}
           </span>
-          <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500 msg-col-label">
             {t('dashboard.messagesColFlight')}
           </span>
-          <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500 msg-col-label">
             {t('dashboard.messagesColMessage')}
           </span>
         </div>
@@ -182,12 +182,12 @@ export function FlightMessagesModal({
                     }`}
                 >
                   {/* Clock time */}
-                  <span className="text-[11px] font-medium text-gray-200 tabular-nums leading-tight">
+                  <span className="text-[11px] font-medium text-gray-200 tabular-nums leading-tight msg-time">
                     {formatClockTime(flightStartTime, msg.timestampMs, hour12)}
                   </span>
 
                   {/* Flight time */}
-                  <span className="text-[11px] tabular-nums text-gray-400 leading-tight">
+                  <span className="text-[11px] tabular-nums text-gray-400 leading-tight msg-flight-time">
                     {formatFlightTime(msg.timestampMs)}
                   </span>
 
@@ -237,7 +237,7 @@ export function FlightMessagesModal({
                       </svg>
                     )}
                     <span
-                      className={`text-sm leading-snug break-words min-w-0 ${isCaution ? 'text-red-200' : isWarn ? 'text-amber-200' : 'text-blue-200'
+                      className={`text-sm leading-snug break-words min-w-0 msg-text ${isCaution ? 'text-red-200 msg-text-caution' : isWarn ? 'text-amber-200 msg-text-warn' : 'text-blue-200 msg-text-tip'
                         }`}
                     >
                       {msg.message}
