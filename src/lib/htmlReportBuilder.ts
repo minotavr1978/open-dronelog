@@ -448,9 +448,7 @@ function buildFlightColumns(
   if (fc.droneModel) equipItems.push({ label: 'Drone Model', value: esc(fd.flight.droneModel || '—') });
   if (fc.droneSerial) equipItems.push({ label: 'Drone SN', value: esc(fd.flight.droneSerial || '—') });
   if (fc.batterySerial) {
-    const serial = fd.flight.batterySerial || '—';
-    const display = serial !== '—' && fd.getBatteryDisplayName ? fd.getBatteryDisplayName(serial) : serial;
-    equipItems.push({ label: 'Battery SN', value: esc(display) });
+    equipItems.push({ label: 'Battery SN', value: esc(fd.flight.batterySerial || '—') });
   }
   if (equipItems.length > 0) columns.push({ isStacked: false, groups: [{ group: 'Equipment', items: equipItems }] });
 
