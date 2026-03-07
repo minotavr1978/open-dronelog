@@ -745,8 +745,11 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
       const pass1 = movingAverageSmooth(track, 5);
       return movingAverageSmooth(pass1, 4);
     }
-    // Desktop: Catmull-Rom spline for buttery-smooth curves
-    return smoothTrack(track, 4);
+    // Desktop/Web: cap raw points before Catmull-Rom to avoid creating
+    // an excessive number of segments (resolution 4 = 4x multiplier).
+    // 3000 raw → ~12000 smoothed points is plenty for visual fidelity.
+    const capped = track.length > 3000 ? downsample(track, 3000) : track;
+    return smoothTrack(capped, 4);
   }, [track]);
 
   const deckPathData = useMemo(() => {
@@ -866,6 +869,24 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
       meta: { height: number; speed: number; distance: number; progress: number; lat: number; lng: number; battery: number | null };
     }[] = [];
 
+    // Batch consecutive segments whose colors are similar into multi-point
+    // paths.  For gradient modes (progress/height/speed/distance) the color
+    // changes on every segment, so exact-match batching does nothing.
+    // Using a perceptual threshold (max channel diff ≤ 12) groups segments
+    // that look virtually identical, cutting draw calls by 10-40× while
+    // preserving the visible gradient.
+    const BATCH_SIZE = 80;
+    const COLOR_THRESHOLD = 12; // max per-channel diff to consider "same color"
+    let batchPath: [number, number, number][] = [];
+    let batchColor: [number, number, number] | null = null;
+    let batchMeta: { height: number; speed: number; distance: number; progress: number; lat: number; lng: number; battery: number | null } | null = null;
+
+    const flushBatch = () => {
+      if (batchPath.length >= 2 && batchColor && batchMeta) {
+        segments.push({ path: [...batchPath], color: batchColor, meta: batchMeta });
+      }
+    };
+
     for (let i = 0; i < n - 1; i++) {
       const ptA = smoothedTrack[i];
       const ptB = smoothedTrack[i + 1];
@@ -883,13 +904,19 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
 
       const [lng1, lat1, alt1] = ptA;
       const [lng2, lat2, alt2] = ptB;
-      segments.push({
-        path: [
-          [lng1, lat1, toAlt(alt1)],
-          [lng2, lat2, toAlt(alt2)],
-        ],
-        color,
-        meta: {
+      const pt1: [number, number, number] = [lng1, lat1, toAlt(alt1)];
+      const pt2: [number, number, number] = [lng2, lat2, toAlt(alt2)];
+
+      // Check if color is close enough to current batch color
+      const similarColor = batchColor &&
+        Math.abs(color[0] - batchColor[0]) <= COLOR_THRESHOLD &&
+        Math.abs(color[1] - batchColor[1]) <= COLOR_THRESHOLD &&
+        Math.abs(color[2] - batchColor[2]) <= COLOR_THRESHOLD;
+      if (!similarColor || batchPath.length >= BATCH_SIZE) {
+        flushBatch();
+        batchPath = [pt1, pt2];
+        batchColor = color;
+        batchMeta = {
           height: alt1,
           speed: speeds[i],
           distance: distances[i],
@@ -897,9 +924,12 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
           lat: lat1,
           lng: lng1,
           battery: batteryAtIndex[i],
-        },
-      });
+        };
+      } else {
+        batchPath.push(pt2);
+      }
     }
+    flushBatch();
 
     return segments;
   }, [is3D, smoothedTrack, track, colorBy, homeLat, homeLon, telemetry]);
@@ -1265,16 +1295,6 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
   const resetView = useCallback(() => {
     if (track.length === 0) return;
 
-    const map = mapRef.current?.getMap();
-    if (!map) return;
-
-    // Check if map is ready to avoid MapLibre tile errors during style transitions
-    if (!map.isStyleLoaded()) {
-      // Defer reset until style is loaded
-      map.once('styledata', () => resetView());
-      return;
-    }
-
     const [lng, lat] = getTrackCenter(track);
     const bounds = calculateBounds(track);
 
@@ -1286,27 +1306,14 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
       zoom = Math.max(10, Math.min(18, 16 - Math.log2(maxDiff * 111)));
     }
 
-    // Use easeTo for smoother transition that avoids tile fade conflicts
-    try {
-      map.easeTo({
-        center: [lng, lat],
-        zoom,
-        pitch: is3D ? 60 : 0,
-        bearing: 0,
-        duration: 300,
-      });
-    } catch (e) {
-      // Fallback to direct state update if easeTo fails
-      console.warn('[FlightMap] easeTo failed, using fallback:', e);
-      setViewState((prev) => ({
-        ...prev,
-        longitude: lng,
-        latitude: lat,
-        zoom,
-        pitch: is3D ? 60 : 0,
-        bearing: 0,
-      }));
-    }
+    setViewState((prev) => ({
+      ...prev,
+      longitude: lng,
+      latitude: lat,
+      zoom,
+      pitch: is3D ? 60 : 0,
+      bearing: 0,
+    }));
   }, [track, is3D]);
 
   const enableTerrain = useCallback(() => {
