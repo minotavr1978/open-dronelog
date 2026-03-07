@@ -836,11 +836,13 @@ export interface DeleteProfileOptions {
 
 export async function deleteProfile(opts: DeleteProfileOptions): Promise<boolean> {
   if (isWeb) {
-    const params = new URLSearchParams({ name: opts.name });
-    if (opts.password) params.set('password', opts.password);
-    if (opts.master_password) params.set('master_password', opts.master_password);
-    return fetchJson<boolean>(`/profiles/delete?${params}`, {
-      method: 'DELETE',
+    return fetchJson<boolean>('/profiles/delete', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: opts.name,
+        password: opts.password || null,
+        master_password: opts.master_password || null,
+      }),
     });
   }
   const invoke = await getTauriInvoke();
@@ -900,4 +902,32 @@ export async function hasMasterPassword(): Promise<boolean> {
   }
   // Tauri desktop doesn't use master password
   return false;
+}
+
+// ── Auto-logout (Tauri desktop only) ──
+
+export async function getAutoLogout(): Promise<boolean> {
+  if (isWeb) return false;
+  const invoke = await getTauriInvoke();
+  return invoke('get_auto_logout') as Promise<boolean>;
+}
+
+export async function setAutoLogout(enabled: boolean): Promise<boolean> {
+  if (isWeb) return false;
+  const invoke = await getTauriInvoke();
+  return invoke('set_auto_logout', { enabled }) as Promise<boolean>;
+}
+
+// ── App lock (Tauri desktop only) ──
+
+export async function isAppLocked(): Promise<boolean> {
+  if (isWeb) return false;
+  const invoke = await getTauriInvoke();
+  return invoke('is_app_locked') as Promise<boolean>;
+}
+
+export async function unlockProfile(password: string): Promise<boolean> {
+  if (isWeb) return false;
+  const invoke = await getTauriInvoke();
+  return invoke('unlock_profile', { password }) as Promise<boolean>;
 }

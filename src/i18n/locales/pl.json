@@ -376,6 +376,7 @@
     "profilePasswordDesc": "Chroń ten profil hasłem. Każdy, kto przełączy się na ten profil, będzie musiał podać hasło.",
     "passwordEnabled": "Hasło ustawione",
     "passwordDisabled": "Brak hasła",
+    "autoLogout": "Zablokuj przy wyjściu",
     "setPassword": "Ustaw hasło",
     "changePassword": "Zmień hasło",
     "removePassword": "Usuń hasło",

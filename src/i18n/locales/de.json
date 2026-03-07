@@ -376,6 +376,7 @@
     "profilePasswordDesc": "Schützen Sie dieses Profil mit einem Passwort. Jeder, der dorthin wechselt, muss das Passwort eingeben.",
     "passwordEnabled": "Passwort gesetzt",
     "passwordDisabled": "Kein Passwort",
+    "autoLogout": "Beim Beenden sperren",
     "setPassword": "Passwort setzen",
     "changePassword": "Passwort ändern",
     "removePassword": "Passwort entfernen",

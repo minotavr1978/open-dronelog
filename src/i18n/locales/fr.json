@@ -376,6 +376,7 @@
     "profilePasswordDesc": "Protégez ce profil avec un mot de passe. Toute personne y accédant devra saisir le mot de passe.",
     "passwordEnabled": "Mot de passe défini",
     "passwordDisabled": "Pas de mot de passe",
+    "autoLogout": "Verrouiller à la fermeture",
     "setPassword": "Définir un mot de passe",
     "changePassword": "Changer le mot de passe",
     "removePassword": "Supprimer le mot de passe",

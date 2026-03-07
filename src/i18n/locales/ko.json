@@ -376,6 +376,7 @@
     "profilePasswordDesc": "이 프로필을 비밀번호로 보호합니다. 전환 시 비밀번호 입력이 필요합니다.",
     "passwordEnabled": "비밀번호 설정됨",
     "passwordDisabled": "비밀번호 없음",
+    "autoLogout": "종료 시 잠금",
     "setPassword": "비밀번호 설정",
     "changePassword": "비밀번호 변경",
     "removePassword": "비밀번호 제거",

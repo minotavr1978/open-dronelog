@@ -765,6 +765,7 @@ async fn update_flight_color(
 /// GET /api/has_api_key — Check if DJI API key is configured
 async fn has_api_key(
     AxumState(state): AxumState<WebAppState>,
+    _pdb: ProfileDb,
 ) -> Json<bool> {
     let api = DjiApi::with_app_data_dir(state.data_dir.clone());
     Json(api.has_api_key())
@@ -773,6 +774,7 @@ async fn has_api_key(
 /// GET /api/api_key_type — Get the type of the configured API key
 async fn get_api_key_type(
     AxumState(state): AxumState<WebAppState>,
+    _pdb: ProfileDb,
 ) -> Json<String> {
     let api = DjiApi::with_app_data_dir(state.data_dir.clone());
     Json(api.get_api_key_type())
@@ -786,6 +788,7 @@ struct SetApiKeyPayload {
 
 async fn set_api_key(
     AxumState(state): AxumState<WebAppState>,
+    _pdb: ProfileDb,
     Json(payload): Json<SetApiKeyPayload>,
 ) -> Result<Json<bool>, (StatusCode, Json<ErrorResponse>)> {
     let api = DjiApi::with_app_data_dir(state.data_dir.clone());
@@ -797,6 +800,7 @@ async fn set_api_key(
 /// DELETE /api/remove_api_key — Remove the custom API key (fall back to default)
 async fn remove_api_key(
     AxumState(state): AxumState<WebAppState>,
+    _pdb: ProfileDb,
 ) -> Result<Json<bool>, (StatusCode, Json<ErrorResponse>)> {
     let api = DjiApi::with_app_data_dir(state.data_dir.clone());
     api.remove_api_key()
@@ -807,6 +811,7 @@ async fn remove_api_key(
 /// GET /api/app_data_dir — Get the app data directory path
 async fn get_app_data_dir(
     AxumState(state): AxumState<WebAppState>,
+    _pdb: ProfileDb,
 ) -> Json<String> {
     Json(state.data_dir.to_string_lossy().to_string())
 }
@@ -814,6 +819,7 @@ async fn get_app_data_dir(
 /// GET /api/app_log_dir — Get the app log directory path
 async fn get_app_log_dir(
     AxumState(state): AxumState<WebAppState>,
+    _pdb: ProfileDb,
 ) -> Json<String> {
     // In web mode, logs go to stdout/the data dir
     Json(state.data_dir.to_string_lossy().to_string())
@@ -1335,6 +1341,14 @@ async fn sync_single_file(
     };
 
     let file_path = sync_dir.join(filename);
+
+    // Path traversal protection: ensure resolved path stays inside the sync directory
+    let canonical_sync = sync_dir.canonicalize().unwrap_or_else(|_| sync_dir.clone());
+    let canonical_file = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
+    if !canonical_file.starts_with(&canonical_sync) {
+        return Err(err_response(StatusCode::BAD_REQUEST, "Invalid filename — path traversal detected"));
+    }
+
     if !file_path.exists() {
         return Ok(Json(SyncFileResponse {
             success: false,
@@ -1875,7 +1889,7 @@ struct DeleteProfileParams {
 
 async fn delete_profile_endpoint(
     AxumState(state): AxumState<WebAppState>,
-    Query(params): Query<DeleteProfileParams>,
+    Json(params): Json<DeleteProfileParams>,
 ) -> Result<Json<bool>, (StatusCode, Json<ErrorResponse>)> {
     let profile = params.name.trim().to_string();
 
@@ -2063,7 +2077,7 @@ pub fn build_router(state: WebAppState) -> Router {
         .route("/api/profiles", get(list_profiles))
         .route("/api/profiles/active", get(get_active_profile))
         .route("/api/profiles/switch", post(switch_profile))
-        .route("/api/profiles/delete", delete(delete_profile_endpoint))
+        .route("/api/profiles/delete", post(delete_profile_endpoint))
         .route("/api/profiles/set_password", post(set_profile_password))
         .route("/api/profiles/remove_password", post(remove_profile_password))
         .route("/api/profiles/has_master_password", get(has_master_password))

@@ -4,12 +4,12 @@ import i18n from '@/i18n';
 import { useFlightStore } from '@/stores/flightStore';
 import { Dashboard } from '@/components/dashboard/Dashboard';
 import { PasswordInput } from '@/components/ui/PasswordInput';
-import { isWebMode } from '@/lib/api';
+import { isWebMode, unlockProfile } from '@/lib/api';
 
 /** Loading overlay shown during database initialization/migration */
 function InitializationOverlay() {
   const { t } = useTranslation();
-  const { needsAuth, activeProfile, profiles, profilePasswords, loadProfiles, loadFlights } = useFlightStore();
+  const { needsAuth, activeProfile, profiles, profilePasswords, loadProfiles, loadFlights, loadOverview } = useFlightStore();
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [authBusy, setAuthBusy] = useState(false);
@@ -54,15 +54,22 @@ function InitializationOverlay() {
     setAuthBusy(true);
     try {
       if (profilePasswords[selectedProfile]) {
-        // Protected profile — authenticate via switchProfile to get a session token
-        const { switchProfile } = useFlightStore.getState();
-        await switchProfile(selectedProfile, { password: authPassword });
-        // switchProfile reloads the page, so we won't reach here normally.
-        // But as a fallback, try reloading flights:
-        await loadFlights();
+        if (!isWebMode() && selectedProfile === activeProfile) {
+          // Tauri desktop: same-profile unlock (auto-logout scenario).
+          // Uses dedicated unlock command — no page reload needed.
+          await unlockProfile(authPassword);
+          useFlightStore.setState({ needsAuth: false });
+          await Promise.all([loadFlights(), loadOverview()]);
+        } else {
+          // Different profile or web mode — full switch (verifies password + swaps DB)
+          const { switchProfile } = useFlightStore.getState();
+          await switchProfile(selectedProfile, { password: authPassword });
+          // switchProfile reloads the page, so we won't reach here normally.
+          await Promise.all([loadFlights(), loadOverview()]);
+        }
       } else {
         // Unprotected profile — just reload flights directly
-        await loadFlights();
+        await Promise.all([loadFlights(), loadOverview()]);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

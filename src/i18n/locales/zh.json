@@ -376,6 +376,7 @@
     "profilePasswordDesc": "使用密码保护此配置文件。切换时需要输入密码。",
     "passwordEnabled": "密码已设置",
     "passwordDisabled": "无密码",
+    "autoLogout": "退出时锁定",
     "setPassword": "设置密码",
     "changePassword": "更改密码",
     "removePassword": "删除密码",

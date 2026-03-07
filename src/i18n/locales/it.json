@@ -376,6 +376,7 @@
     "profilePasswordDesc": "Proteggi questo profilo con una password. Chi vi accede dovrà inserire la password.",
     "passwordEnabled": "Password impostata",
     "passwordDisabled": "Nessuna password",
+    "autoLogout": "Blocca all'uscita",
     "setPassword": "Imposta password",
     "changePassword": "Cambia password",
     "removePassword": "Rimuovi password",

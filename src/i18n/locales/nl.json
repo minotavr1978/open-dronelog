@@ -376,6 +376,7 @@
     "profilePasswordDesc": "Beveilig dit profiel met een wachtwoord. Iedereen die ernaar overschakelt, moet het wachtwoord invoeren.",
     "passwordEnabled": "Wachtwoord ingesteld",
     "passwordDisabled": "Geen wachtwoord",
+    "autoLogout": "Vergrendelen bij afsluiten",
     "setPassword": "Wachtwoord instellen",
     "changePassword": "Wachtwoord wijzigen",
     "removePassword": "Wachtwoord verwijderen",

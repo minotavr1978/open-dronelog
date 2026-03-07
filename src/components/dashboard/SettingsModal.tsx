@@ -46,6 +46,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [pwConfirm, setPwConfirm] = useState('');
   const [pwMessage, setPwMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [pwBusy, setPwBusy] = useState(false);
+  const [autoLogout, setAutoLogout] = useState(false);
 
   const {
     unitSystem,
@@ -148,6 +149,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       // Load keep upload settings (Tauri desktop only)
       if (!isWebMode()) {
         getKeepUploadSettings().then(setKeepUploadSettingsState);
+        api.getAutoLogout().then(setAutoLogout);
       }
     }
   }, [isOpen]);
@@ -835,6 +837,39 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         {t('settings.setPassword')}
                       </button>
                     </div>
+                  </div>
+                )}
+
+                {/* Auto-logout toggle — Tauri desktop only, visible when profile has a password */}
+                {!isWebMode() && profilePasswords[activeProfile] && (
+                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-700/50">
+                    <label className="text-xs font-medium text-gray-300 cursor-pointer" htmlFor="auto-logout-toggle">
+                      {t('settings.autoLogout')}
+                    </label>
+                    <button
+                      id="auto-logout-toggle"
+                      type="button"
+                      role="switch"
+                      aria-checked={autoLogout}
+                      onClick={async () => {
+                        const next = !autoLogout;
+                        setAutoLogout(next);
+                        try {
+                          await api.setAutoLogout(next);
+                        } catch {
+                          setAutoLogout(!next); // revert on failure
+                        }
+                      }}
+                      className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-drone-primary focus:ring-offset-2 focus:ring-offset-gray-900 ${
+                        autoLogout ? 'bg-drone-primary' : 'bg-gray-600'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transform transition-transform duration-200 ${
+                          autoLogout ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                        }`}
+                      />
+                    </button>
                   </div>
                 )}
               </div>

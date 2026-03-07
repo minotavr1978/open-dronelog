@@ -382,7 +382,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
       }
     } catch (err) {
       const errMsg = String(err);
-      const isAuthError = /password.protected|Session expired|re-authenticate|UNAUTHORIZED/i.test(errMsg);
+      const isAuthError = /password.protected|Session expired|re-authenticate|UNAUTHORIZED|Profile is locked/i.test(errMsg);
       set({ 
         isLoading: false, 
         needsAuth: isAuthError,
@@ -1043,16 +1043,35 @@ export const useFlightStore = create<FlightState>((set, get) => ({
       }
       // Use the client-side (per-tab) active profile from sessionStorage,
       // falling back to the server-default only on first visit.
-      let active = typeof sessionStorage !== 'undefined'
-        ? sessionStorage.getItem('activeProfile') || ''
-        : '';
-      if (!active || !profiles.includes(active)) {
+      // In Tauri desktop mode, always trust the backend (handles auto-logout on close).
+      let active: string;
+      if (api.isWebMode()) {
+        active = typeof sessionStorage !== 'undefined'
+          ? sessionStorage.getItem('activeProfile') || ''
+          : '';
+        if (!active || !profiles.includes(active)) {
+          active = await api.getActiveProfile();
+          if (typeof sessionStorage !== 'undefined') {
+            sessionStorage.setItem('activeProfile', active);
+          }
+        }
+      } else {
         active = await api.getActiveProfile();
         if (typeof sessionStorage !== 'undefined') {
           sessionStorage.setItem('activeProfile', active);
         }
       }
       set({ profiles, activeProfile: active, profilePasswords });
+
+      // Tauri desktop: check if the backend is locked (requires re-auth)
+      if (!api.isWebMode()) {
+        try {
+          const locked = await api.isAppLocked();
+          if (locked) {
+            set({ needsAuth: true, isFlightsInitialized: false });
+          }
+        } catch { /* ignore */ }
+      }
     } catch (err) {
       console.warn('Failed to load profiles:', err);
     }

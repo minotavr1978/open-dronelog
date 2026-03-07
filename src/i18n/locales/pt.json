@@ -376,6 +376,7 @@
     "profilePasswordDesc": "Proteja este perfil com uma palavra-passe. Quem mudar para ele terá de introduzir a palavra-passe.",
     "passwordEnabled": "Palavra-passe definida",
     "passwordDisabled": "Sem palavra-passe",
+    "autoLogout": "Bloquear ao sair",
     "setPassword": "Definir palavra-passe",
     "changePassword": "Alterar palavra-passe",
     "removePassword": "Remover palavra-passe",
