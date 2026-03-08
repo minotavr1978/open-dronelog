@@ -270,6 +270,7 @@
     "batteryName": "Battery name",
     "renameBattery": "Rename battery",
     "flightsAndDuration": "{{n}} flights · {{duration}}",
+    "cycleCountAndFlightsAndDuration": "{{cycles}} cycles | {{flights}} flights · {{duration}}",
     "cycleCountAndDuration": "{{n}} cycles · {{duration}}",
     "flightThreshold": "Flight Threshold",
     "airtimeThreshold": "Airtime Threshold (hrs)",

@@ -265,6 +265,7 @@
     "batteryName": "Batterijnaam",
     "renameBattery": "Batterij hernoemen",
     "flightsAndDuration": "{{n}} vluchten · {{duration}}",
+    "cycleCountAndFlightsAndDuration": "{{cycles}} cycli | {{flights}} vluchten · {{duration}}",
     "cycleCountAndDuration": "{{n}} cycli · {{duration}}",
     "maintenance": "Onderhoud",
     "batteryMaintenance": "Batterijonderhoud",

@@ -1204,7 +1204,7 @@ function DroneFlightTimeList({
               ) : (
                 <div
                   className="grid items-center gap-1.5 text-xs"
-                  style={{ gridTemplateColumns: '140px 1fr 55px' }}
+                  style={{ gridTemplateColumns: '140px 1fr 120px' }}
                   title={!hideSerialNumbers && drone.droneSerial ? (displayName !== drone.droneSerial ? `${displayName} (${drone.droneSerial})` : drone.droneSerial) : undefined}
                 >
                   <span
@@ -1239,7 +1239,7 @@ function DroneFlightTimeList({
                     />
                   </div>
                   <span className="text-[10px] text-gray-400 text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                    {durationLabel}
+                    {durationLabel} · {t('overview.flightCount', { count: drone.flightCount })}
                   </span>
                 </div>
               )}
@@ -1920,7 +1920,7 @@ function BatteryHealthList({
                   </span>
                   <span className="hidden md:inline-block w-[90px] md:w-[150px] flex-shrink-0 text-gray-400 text-[9px] md:text-[10px] text-right md:text-left truncate">
                     {cycleCount != null
-                      ? t('overview.cycleCountAndDuration', { n: cycleCount, duration: formatDuration(battery.totalDurationSecs) })
+                      ? t('overview.cycleCountAndFlightsAndDuration', { cycles: cycleCount, flights: battery.flightCount, duration: formatDuration(battery.totalDurationSecs) })
                       : t('overview.flightsAndDuration', { n: battery.flightCount, duration: formatDuration(battery.totalDurationSecs) })}
                   </span>
                 </div>

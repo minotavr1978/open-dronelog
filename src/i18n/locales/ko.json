@@ -265,6 +265,7 @@
     "batteryName": "배터리 이름",
     "renameBattery": "배터리 이름 변경",
     "flightsAndDuration": "{{n}}회 비행 · {{duration}}",
+    "cycleCountAndFlightsAndDuration": "{{cycles}}회 충전 | {{flights}}회 비행 · {{duration}}",
     "cycleCountAndDuration": "{{n}}회 충전 · {{duration}}",
     "maintenance": "정비",
     "batteryMaintenance": "배터리 정비",

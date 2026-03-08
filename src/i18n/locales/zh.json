@@ -265,6 +265,7 @@
     "batteryName": "电池名称",
     "renameBattery": "重命名电池",
     "flightsAndDuration": "{{n}} 次飞行 · {{duration}}",
+    "cycleCountAndFlightsAndDuration": "{{cycles}} 次充放电 | {{flights}} 次飞行 · {{duration}}",
     "cycleCountAndDuration": "{{n}} 次充放电 · {{duration}}",
     "maintenance": "维护",
     "batteryMaintenance": "电池维护",
