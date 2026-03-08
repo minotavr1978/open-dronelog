@@ -267,6 +267,8 @@
     "flightsAndDuration": "{{n}} vols · {{duration}}",
     "cycleCountAndFlightsAndDuration": "{{cycles}} cycles | {{flights}} vols · {{duration}}",
     "cycleCountAndDuration": "{{n}} cycles · {{duration}}",
+    "flightCount_one": "{{count}} vol",
+    "flightCount_other": "{{count}} vols",
     "maintenance": "Maintenance",
     "batteryMaintenance": "Maintenance des batteries",
     "aircraftMaintenance": "Maintenance des aéronefs",

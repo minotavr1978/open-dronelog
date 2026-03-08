@@ -272,6 +272,8 @@
     "flightsAndDuration": "{{n}} flights · {{duration}}",
     "cycleCountAndFlightsAndDuration": "{{cycles}} cycles | {{flights}} flights · {{duration}}",
     "cycleCountAndDuration": "{{n}} cycles · {{duration}}",
+    "flightCount_one": "{{count}} flight",
+    "flightCount_other": "{{count}} flights",
     "flightThreshold": "Flight Threshold",
     "airtimeThreshold": "Airtime Threshold (hrs)",
     "applyThresholds": "Apply Thresholds",

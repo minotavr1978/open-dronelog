@@ -267,6 +267,8 @@
     "flightsAndDuration": "{{n}} 次飞行 · {{duration}}",
     "cycleCountAndFlightsAndDuration": "{{cycles}} 次充放电 | {{flights}} 次飞行 · {{duration}}",
     "cycleCountAndDuration": "{{n}} 次充放电 · {{duration}}",
+    "flightCount_one": "{{count}} 次飞行",
+    "flightCount_other": "{{count}} 次飞行",
     "maintenance": "维护",
     "batteryMaintenance": "电池维护",
     "aircraftMaintenance": "飞行器维护",

@@ -267,6 +267,8 @@
     "flightsAndDuration": "{{n}} フライト · {{duration}}",
     "cycleCountAndFlightsAndDuration": "{{cycles}} サイクル | {{flights}} フライト · {{duration}}",
     "cycleCountAndDuration": "{{n}} サイクル · {{duration}}",
+    "flightCount_one": "{{count}} フライト",
+    "flightCount_other": "{{count}} フライト",
     "maintenance": "メンテナンス",
     "batteryMaintenance": "バッテリーメンテナンス",
     "aircraftMaintenance": "機体メンテナンス",

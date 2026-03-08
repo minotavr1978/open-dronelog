@@ -267,6 +267,8 @@
     "flightsAndDuration": "{{n}}회 비행 · {{duration}}",
     "cycleCountAndFlightsAndDuration": "{{cycles}}회 충전 | {{flights}}회 비행 · {{duration}}",
     "cycleCountAndDuration": "{{n}}회 충전 · {{duration}}",
+    "flightCount_one": "{{count}} 비행",
+    "flightCount_other": "{{count}} 비행",
     "maintenance": "정비",
     "batteryMaintenance": "배터리 정비",
     "aircraftMaintenance": "기체 정비",

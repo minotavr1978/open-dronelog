@@ -263,6 +263,8 @@
     "flightsAndDuration": "{{n}} lotów · {{duration}}",
     "cycleCountAndFlightsAndDuration": "{{cycles}} cykli | {{flights}} lotów · {{duration}}",
     "cycleCountAndDuration": "{{n}} cykli · {{duration}}",
+    "flightCount_one": "{{count}} lot",
+    "flightCount_other": "{{count}} lotów",
     "maintenance": "Konserwacja",
     "batteryMaintenance": "Konserwacja Baterii",
     "aircraftMaintenance": "Konserwacja Statku Powietrznego",
