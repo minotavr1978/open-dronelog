@@ -15,11 +15,12 @@ permissions:
   actions: read
 
 jobs:
-  resolve-tag:
+  sign-and-release:
     runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.tag.outputs.tag }}
-      version: ${{ steps.tag.outputs.version }}
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
     steps:
       - name: Resolve release tag
         id: tag
@@ -36,81 +37,48 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Resolved tag: $TAG (version: $VERSION)"
 
-  build-windows:
-    needs: resolve-tag
-    runs-on: windows-latest
-    outputs:
-      exe-artifact-id: ${{ steps.upload-exe.outputs.artifact-id }}
-      msi-artifact-id: ${{ steps.upload-msi.outputs.artifact-id }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.resolve-tag.outputs.tag }}
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc
-
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      - name: Build Tauri app
-        run: npx tauri build --target x86_64-pc-windows-msvc --verbose
-
-      - name: Find built artifacts
-        id: find
-        shell: bash
+      - name: Download unsigned Windows binaries from release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          EXE=$(find src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis -name '*.exe' -type f | head -1)
-          MSI=$(find src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi -name '*.msi' -type f | head -1)
+          mkdir -p unsigned/exe unsigned/msi
+          gh release download "$TAG" \
+            --repo "${{ github.repository }}" \
+            --dir unsigned/exe \
+            --pattern '*.exe'
+          gh release download "$TAG" \
+            --repo "${{ github.repository }}" \
+            --dir unsigned/msi \
+            --pattern '*.msi'
+
+          EXE=$(find unsigned/exe -name '*.exe' -type f | head -1)
+          MSI=$(find unsigned/msi -name '*.msi' -type f | head -1)
           if [ -z "$EXE" ] || [ -z "$MSI" ]; then
-            echo "::error::Could not find .exe or .msi in build output"
+            echo "::error::Could not find .exe or .msi in release $TAG"
             exit 1
           fi
-          echo "exe-path=$EXE" >> $GITHUB_OUTPUT
-          echo "msi-path=$MSI" >> $GITHUB_OUTPUT
-          echo "Found EXE: $EXE"
-          echo "Found MSI: $MSI"
+          echo "Downloaded EXE: $EXE"
+          echo "Downloaded MSI: $MSI"
 
-      - name: Upload unsigned .exe
+      - name: Upload .exe as workflow artifact
         id: upload-exe
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-exe
-          path: ${{ steps.find.outputs.exe-path }}
+          path: unsigned/exe/*.exe
           if-no-files-found: error
           retention-days: 1
 
-      - name: Upload unsigned .msi
+      - name: Upload .msi as workflow artifact
         id: upload-msi
         uses: actions/upload-artifact@v4
         with:
           name: unsigned-msi
-          path: ${{ steps.find.outputs.msi-path }}
+          path: unsigned/msi/*.msi
           if-no-files-found: error
           retention-days: 1
 
-  sign-and-release:
-    needs: [resolve-tag, build-windows]
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: write
-      actions: read
-    steps:
       - name: Sign .exe with SignPath
         id: sign-exe
         uses: signpath/github-action-submit-signing-request@v2
@@ -120,7 +88,7 @@ jobs:
           project-slug: '${{ secrets.SIGNPATH_PROJECT_SLUG }}'
           signing-policy-slug: '${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}'
           artifact-configuration-slug: '${{ secrets.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}'
-          github-artifact-id: '${{ needs.build-windows.outputs.exe-artifact-id }}'
+          github-artifact-id: '${{ steps.upload-exe.outputs.artifact-id }}'
           wait-for-completion: true
           output-artifact-directory: 'signed/exe'
 
@@ -133,13 +101,13 @@ jobs:
           project-slug: '${{ secrets.SIGNPATH_PROJECT_SLUG }}'
           signing-policy-slug: '${{ secrets.SIGNPATH_SIGNING_POLICY_SLUG }}'
           artifact-configuration-slug: '${{ secrets.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}'
-          github-artifact-id: '${{ needs.build-windows.outputs.msi-artifact-id }}'
+          github-artifact-id: '${{ steps.upload-msi.outputs.artifact-id }}'
           wait-for-completion: true
           output-artifact-directory: 'signed/msi'
 
       - name: Prepare release assets
         env:
-          VERSION: ${{ needs.resolve-tag.outputs.version }}
+          VERSION: ${{ steps.tag.outputs.version }}
         run: |
           mkdir -p release-assets
 
@@ -160,17 +128,17 @@ jobs:
       - name: Upload signed binaries to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.resolve-tag.outputs.tag }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           gh release upload "$TAG" release-assets/* \
             --repo "${{ github.repository }}" \
             --clobber
-          echo "✓ Signed binaries uploaded to release $TAG"
+          echo "Signed binaries uploaded to release $TAG"
 
       - name: Regenerate checksums
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.resolve-tag.outputs.tag }}
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
           mkdir -p all-assets
           gh release download "$TAG" \
@@ -194,7 +162,7 @@ jobs:
             gh release upload "$TAG" checksums.txt \
               --repo "${{ github.repository }}" \
               --clobber
-            echo "✓ Checksums updated"
+            echo "Checksums updated"
           else
             echo "::warning::No assets found to checksum"
           fi
