@@ -362,7 +362,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
     height: number; speed: number; distance: number; progress: number;
     lat: number; lng: number; battery: number | null;
   } | null>(null);
-  const { unitSystem, locale, mapSyncEnabled, setMapReplayProgress } = useFlightStore();
+  const { unitPrefs, locale, mapSyncEnabled, setMapReplayProgress } = useFlightStore();
   const mapRef = useRef<MapRef | null>(null);
   const overlayRef = useRef<MapboxOverlay | null>(null);
 
@@ -1710,15 +1710,15 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
             )}
             <div className="flex justify-between gap-4">
               <span className="text-gray-400">{t('map.height')}</span>
-              <span className="font-medium text-white">{formatAltitude(hoverInfo.height, unitSystem, locale)}</span>
+              <span className="font-medium text-white">{formatAltitude(hoverInfo.height, unitPrefs.altitude, locale)}</span>
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-gray-400">{t('map.speed')}</span>
-              <span className="font-medium text-white">{formatSpeed(hoverInfo.speed, unitSystem, locale)}</span>
+              <span className="font-medium text-white">{formatSpeed(hoverInfo.speed, unitPrefs.speed, locale)}</span>
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-gray-400">{t('map.distHome')}</span>
-              <span className="font-medium text-white">{formatDistance(hoverInfo.distance, unitSystem, locale)}</span>
+              <span className="font-medium text-white">{formatDistance(hoverInfo.distance, unitPrefs.distance, locale)}</span>
             </div>
             {hoverInfo.battery != null && (
               <div className="flex justify-between gap-4">
@@ -1761,9 +1761,9 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
 
             {/* Primary stats */}
             <div className="space-y-1">
-              <ReplayStatRow label={t('map.height')} value={formatAltitude(replayTelemetry.height, unitSystem, locale)} />
-              <ReplayStatRow label={t('map.speed')} value={formatSpeed(replayTelemetry.speed, unitSystem, locale)} />
-              <ReplayStatRow label={t('map.distHome')} value={formatDistance(replayTelemetry.distHome, unitSystem, locale)} />
+              <ReplayStatRow label={t('map.height')} value={formatAltitude(replayTelemetry.height, unitPrefs.altitude, locale)} />
+              <ReplayStatRow label={t('map.speed')} value={formatSpeed(replayTelemetry.speed, unitPrefs.speed, locale)} />
+              <ReplayStatRow label={t('map.distHome')} value={formatDistance(replayTelemetry.distHome, unitPrefs.distance, locale)} />
             </div>
 
             {/* Battery */}
@@ -1779,7 +1779,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
                   <ReplayStatRow label={t('map.voltage')} value={`${replayTelemetry.batteryVoltage!.toFixed(1)} V`} />
                 )}
                 {replayTelemetry.batteryTemp != null && (
-                  <ReplayStatRow label={t('map.battTemp')} value={unitSystem === 'imperial' ? `${(replayTelemetry.batteryTemp! * 9 / 5 + 32).toFixed(0)}°F` : `${replayTelemetry.batteryTemp!.toFixed(0)}°C`} />
+                  <ReplayStatRow label={t('map.battTemp')} value={unitPrefs.temperature === 'imperial' ? `${(replayTelemetry.batteryTemp! * 9 / 5 + 32).toFixed(0)}°F` : `${replayTelemetry.batteryTemp!.toFixed(0)}°C`} />
                 )}
               </div>
             )}

@@ -4,6 +4,21 @@
 
 export type UnitSystem = 'metric' | 'imperial';
 
+/** Granular per-measurement-type unit preferences */
+export type UnitPreferences = {
+  distance: UnitSystem;
+  speed: UnitSystem;
+  altitude: UnitSystem;
+  temperature: UnitSystem;
+};
+
+export const DEFAULT_UNIT_PREFS: UnitPreferences = {
+  distance: 'metric',
+  speed: 'metric',
+  altitude: 'metric',
+  temperature: 'metric',
+};
+
 /** Locale-aware number formatter helper */
 export function fmtNum(value: number, decimals: number, locale?: string): string {
   return new Intl.NumberFormat(locale, {
@@ -15,7 +30,7 @@ export function fmtNum(value: number, decimals: number, locale?: string): string
 /** Format duration from seconds to human readable string */
 export function formatDuration(seconds: number | null): string {
   if (seconds === null || seconds === undefined) return '--:--';
-  
+
   const hours = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
   const secs = Math.floor(seconds % 60);
@@ -38,7 +53,7 @@ export function formatDistance(
     const miles = meters / 1609.344;
     return `${fmtNum(miles, 2, locale)} mi`;
   }
-  
+
   if (meters >= 1000) {
     return `${fmtNum(meters / 1000, 2, locale)} km`;
   }
@@ -104,14 +119,14 @@ interface DateFormatConfig {
 }
 
 const DATE_FORMAT_CONFIGS: Record<string, DateFormatConfig> = {
-  'DD/MM/YYYY':   { order: 'DMY', separator: '/', padded: true },
-  'MM/DD/YYYY':   { order: 'MDY', separator: '/', padded: true },
-  'DD.MM.YYYY':   { order: 'DMY', separator: '.', padded: true },
-  'DD-MM-YYYY':   { order: 'DMY', separator: '-', padded: true },
-  'YYYY-MM-DD':   { order: 'YMD', separator: '-', padded: true },
-  'YYYY/MM/DD':   { order: 'YMD', separator: '/', padded: true },
-  'YYYY/M/D':     { order: 'YMD', separator: '/', padded: false },
-  'YYYY. M. D.':  { order: 'YMD', separator: '. ', padded: false, trailing: '.' },
+  'DD/MM/YYYY': { order: 'DMY', separator: '/', padded: true },
+  'MM/DD/YYYY': { order: 'MDY', separator: '/', padded: true },
+  'DD.MM.YYYY': { order: 'DMY', separator: '.', padded: true },
+  'DD-MM-YYYY': { order: 'DMY', separator: '-', padded: true },
+  'YYYY-MM-DD': { order: 'YMD', separator: '-', padded: true },
+  'YYYY/MM/DD': { order: 'YMD', separator: '/', padded: true },
+  'YYYY/M/D': { order: 'YMD', separator: '/', padded: false },
+  'YYYY. M. D.': { order: 'YMD', separator: '. ', padded: false, trailing: '.' },
 };
 
 /** Mapping from legacy locale-based date format values to pattern strings. */

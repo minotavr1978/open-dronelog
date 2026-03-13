@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import * as api from '@/lib/api';
 import type { Flight, FlightDataResponse, FlightMessage, ImportResult, OverviewStats } from '@/types';
-import { normalizeSerial, LEGACY_DATE_LOCALE_MAP } from '@/lib/utils';
+import { normalizeSerial, LEGACY_DATE_LOCALE_MAP, type UnitPreferences, DEFAULT_UNIT_PREFS } from '@/lib/utils';
 import i18n from '@/i18n';
 
 /**
@@ -73,13 +73,13 @@ interface FlightState {
   isRemovingAutoTags: boolean;
   regenerationProgress: { processed: number; total: number } | null;
   error: string | null;
-  unitSystem: 'metric' | 'imperial';
+  unitPrefs: UnitPreferences;
   themeMode: 'system' | 'dark' | 'light';
   donationAcknowledged: boolean;
   supporterBadgeActive: boolean;
   allTags: string[];
   smartTagsEnabled: boolean;
-  
+
   // API key type for cooldown bypass (personal keys skip cooldown)
   apiKeyType: 'none' | 'default' | 'personal';
 
@@ -116,7 +116,7 @@ interface FlightState {
   setAppLanguage: (lang: string) => void;
   timeFormat: '12h' | '24h';
   setTimeFormat: (format: '12h' | '24h') => void;
-  setUnitSystem: (unitSystem: 'metric' | 'imperial') => void;
+  setUnitPref: (key: keyof UnitPreferences, value: 'metric' | 'imperial') => void;
   setThemeMode: (themeMode: 'system' | 'dark' | 'light') => void;
   setDonationAcknowledged: (value: boolean) => void;
   setSupporterBadge: (active: boolean) => void;
@@ -241,10 +241,23 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     const stored = localStorage.getItem('timeFormat');
     return stored === '12h' || stored === '24h' ? stored : '12h';
   })() as '12h' | '24h',
-  unitSystem:
-    (typeof localStorage !== 'undefined' &&
-      (localStorage.getItem('unitSystem') as 'metric' | 'imperial')) ||
-    'metric',
+  unitPrefs: (() => {
+    if (typeof localStorage === 'undefined') return { ...DEFAULT_UNIT_PREFS };
+    // Try new granular key first
+    const stored = localStorage.getItem('unitPrefs');
+    if (stored) {
+      try { return { ...DEFAULT_UNIT_PREFS, ...JSON.parse(stored) }; } catch { /* fall through */ }
+    }
+    // Migrate from legacy unitSystem key
+    const legacy = localStorage.getItem('unitSystem') as 'metric' | 'imperial' | null;
+    if (legacy) {
+      const migrated: UnitPreferences = { distance: legacy, speed: legacy, altitude: legacy, temperature: legacy };
+      localStorage.setItem('unitPrefs', JSON.stringify(migrated));
+      localStorage.removeItem('unitSystem');
+      return migrated;
+    }
+    return { ...DEFAULT_UNIT_PREFS };
+  })(),
   themeMode: (() => {
     if (typeof localStorage === 'undefined') return 'system';
     const stored = localStorage.getItem('themeMode');
@@ -397,7 +410,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
 
       // Load all tags in background
       get().loadAllTags();
-      
+
       // Load equipment names from server (for cross-device sync)
       get().loadEquipmentNames();
 
@@ -425,10 +438,10 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     } catch (err) {
       const errMsg = String(err);
       const isAuthError = /password.protected|Session expired|re-authenticate|UNAUTHORIZED|Profile is locked/i.test(errMsg);
-      set({ 
-        isLoading: false, 
+      set({
+        isLoading: false,
         needsAuth: isAuthError,
-        error: isAuthError ? null : `Failed to load flights: ${err}` 
+        error: isAuthError ? null : `Failed to load flights: ${err}`
       });
     }
   },
@@ -488,11 +501,11 @@ export const useFlightStore = create<FlightState>((set, get) => ({
       if (typeof localStorage !== 'undefined') {
         localStorage.removeItem('lastSelectedFlightId');
       }
-      set({ 
-        isLoading: false, 
+      set({
+        isLoading: false,
         selectedFlightId: null,
         currentFlightData: null,
-        error: `Failed to load flight data: ${err}` 
+        error: `Failed to load flight data: ${err}`
       });
     }
   },
@@ -503,7 +516,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     set({ isImporting: true, error: null });
     try {
       const result = await api.importLog(fileOrPath);
-      
+
       if (result.success && result.flightId && !skipRefresh) {
         // Reload flights and select the new one (only for single imports)
         await get().loadFlights();
@@ -511,7 +524,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
         // Refresh all tags since import may have added new smart tags
         get().loadAllTags();
       }
-      
+
       set({ isImporting: false });
       return result;
     } catch (err) {
@@ -580,18 +593,18 @@ export const useFlightStore = create<FlightState>((set, get) => ({
   deleteFlight: async (flightId: number) => {
     try {
       await api.deleteFlight(flightId);
-      
+
       // Remove from cache
       const cache = new Map(get()._flightDataCache);
       cache.delete(flightId);
-      
+
       // Clear selection if deleted flight was selected
       if (get().selectedFlightId === flightId) {
         set({ selectedFlightId: null, currentFlightData: null, _flightDataCache: cache });
       } else {
         set({ _flightDataCache: cache });
       }
-      
+
       // Reload flights
       await get().loadFlights();
     } catch (err) {
@@ -787,7 +800,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     set({ isRegenerating: true, regenerationProgress: { processed: 0, total }, error: null });
     let errors = 0;
     const start = Date.now();
-    
+
     // Get enabled tag types from localStorage
     const enabledTagTypes = api.getEnabledSmartTagTypes();
 
@@ -867,11 +880,12 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     set({ timeFormat: format });
   },
 
-  setUnitSystem: (unitSystem) => {
+  setUnitPref: (key, value) => {
+    const updated = { ...get().unitPrefs, [key]: value };
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('unitSystem', unitSystem);
+      localStorage.setItem('unitPrefs', JSON.stringify(updated));
     }
-    set({ unitSystem });
+    set({ unitPrefs: updated });
   },
 
   setThemeMode: (themeMode) => {
@@ -926,22 +940,22 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     const map = { ...get().batteryNameMap };
     const trimmedName = displayName.trim();
     const shouldDelete = trimmedName === '' || trimmedName === normalizedSerial;
-    
+
     if (shouldDelete) {
       // Reset to original serial name
       delete map[normalizedSerial];
     } else {
       map[normalizedSerial] = trimmedName;
     }
-    
+
     // Optimistically update local state first
     set({ batteryNameMap: map });
-    
+
     // Cache in localStorage for quick retrieval on page load
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('batteryNameMap', JSON.stringify(map));
     }
-    
+
     // Persist to server for cross-device sync
     try {
       await api.setEquipmentName(normalizedSerial, 'battery', shouldDelete ? '' : trimmedName);
@@ -962,22 +976,22 @@ export const useFlightStore = create<FlightState>((set, get) => ({
     const map = { ...get().droneNameMap };
     const trimmedName = displayName.trim();
     const shouldDelete = trimmedName === '';
-    
+
     if (shouldDelete) {
       // Reset to original name
       delete map[normalizedSerial];
     } else {
       map[normalizedSerial] = trimmedName;
     }
-    
+
     // Optimistically update local state first
     set({ droneNameMap: map });
-    
+
     // Cache in localStorage for quick retrieval on page load
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('droneNameMap', JSON.stringify(map));
     }
-    
+
     // Persist to server for cross-device sync
     try {
       await api.setEquipmentName(normalizedSerial, 'aircraft', shouldDelete ? '' : trimmedName);
@@ -994,14 +1008,14 @@ export const useFlightStore = create<FlightState>((set, get) => ({
   loadEquipmentNames: async () => {
     try {
       const response = await api.getEquipmentNames();
-      
+
       // Merge server data with local state (server wins for conflicts)
       const batteryNameMap = { ...response.battery_names };
       const droneNameMap = { ...response.aircraft_names };
-      
+
       // Update state
       set({ batteryNameMap, droneNameMap });
-      
+
       // Update localStorage cache
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem('batteryNameMap', JSON.stringify(batteryNameMap));
@@ -1133,7 +1147,7 @@ export const useFlightStore = create<FlightState>((set, get) => ({
 
     // ── Save current profile's localStorage settings ──
     const perProfileKeys = [
-      'unitSystem', 'themeMode', 'appLanguage', 'locale', 'dateLocale',
+      'unitPrefs', 'themeMode', 'appLanguage', 'locale', 'dateLocale',
       'timeFormat', 'hideSerialNumbers', 'batteryNameMap', 'droneNameMap',
       'maintenanceThresholds', 'maintenanceLastReset',
       'lastSelectedFlightId', 'sidebarWidth', 'chartFieldSelections',

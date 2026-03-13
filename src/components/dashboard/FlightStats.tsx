@@ -27,7 +27,7 @@ interface FlightStatsProps {
 export function FlightStats({ data }: FlightStatsProps) {
   const { t } = useTranslation();
   const { flight, telemetry } = data;
-  const { unitSystem, locale, dateLocale, appLanguage, getBatteryDisplayName, getDroneDisplayName, addTag, removeTag, allTags, getDisplaySerial, timeFormat } = useFlightStore();
+  const { unitPrefs, locale, dateLocale, appLanguage, getBatteryDisplayName, getDroneDisplayName, addTag, removeTag, allTags, getDisplaySerial, timeFormat } = useFlightStore();
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isWeatherOpen, setIsWeatherOpen] = useState(false);
@@ -183,29 +183,26 @@ export function FlightStats({ data }: FlightStatsProps) {
           <div className="text-sm text-gray-400 flex flex-wrap items-center gap-2 mt-2">
             {formatDateTime(flight.startTime, dateLocale, appLanguage, timeFormat === '24h' ? false : true)}
             {flight.aircraftName && (
-              <span className={`px-2 py-0.5 rounded-full text-xs border ${
-                flight.droneSerial && isDecommissioned(getDroneDisplayName(flight.droneSerial, flight.aircraftName || flight.droneModel || ''))
-                  ? 'border-gray-500/40 text-gray-400 bg-gray-500/15'
-                  : 'border-drone-primary/40 text-drone-primary bg-drone-primary/10'
-              }`}>
+              <span className={`px-2 py-0.5 rounded-full text-xs border ${flight.droneSerial && isDecommissioned(getDroneDisplayName(flight.droneSerial, flight.aircraftName || flight.droneModel || ''))
+                ? 'border-gray-500/40 text-gray-400 bg-gray-500/15'
+                : 'border-drone-primary/40 text-drone-primary bg-drone-primary/10'
+                }`}>
                 {t('flightStats.device')} {flight.aircraftName}
               </span>
             )}
             {flight.droneSerial && (
-              <span className={`px-2 py-0.5 rounded-full text-xs border ${
-                isDecommissioned(getDroneDisplayName(flight.droneSerial, flight.aircraftName || flight.droneModel || ''))
-                  ? 'border-gray-500/40 text-gray-400 bg-gray-500/15'
-                  : 'border-gray-600/60 text-gray-400 bg-drone-surface/60'
-              }`}>
+              <span className={`px-2 py-0.5 rounded-full text-xs border ${isDecommissioned(getDroneDisplayName(flight.droneSerial, flight.aircraftName || flight.droneModel || ''))
+                ? 'border-gray-500/40 text-gray-400 bg-gray-500/15'
+                : 'border-gray-600/60 text-gray-400 bg-drone-surface/60'
+                }`}>
                 {t('flightStats.sn')} {getDisplaySerial(flight.droneSerial)}
               </span>
             )}
             {flight.batterySerial && (
-              <span className={`px-2 py-0.5 rounded-full text-xs border ${
-                isDecommissioned(getBatteryDisplayName(flight.batterySerial))
-                  ? 'border-gray-500/40 text-gray-400 bg-gray-500/15'
-                  : 'border-drone-accent/40 text-drone-accent bg-drone-accent/10'
-              }`}>
+              <span className={`px-2 py-0.5 rounded-full text-xs border ${isDecommissioned(getBatteryDisplayName(flight.batterySerial))
+                ? 'border-gray-500/40 text-gray-400 bg-gray-500/15'
+                : 'border-drone-accent/40 text-drone-accent bg-drone-accent/10'
+                }`}>
                 {t('flightStats.battery')} {getBatteryDisplayName(flight.batterySerial)}
               </span>
             )}
@@ -310,21 +307,21 @@ export function FlightStats({ data }: FlightStatsProps) {
         <div className="flex-1 min-w-[120px] md:min-w-0">
           <StatCard
             label={t('flightStats.distance')}
-            value={formatDistance(flight.totalDistance, unitSystem, locale)}
+            value={formatDistance(flight.totalDistance, unitPrefs.distance, locale)}
             icon={<DistanceIcon />}
           />
         </div>
         <div className="flex-1 min-w-[120px] md:min-w-0">
           <StatCard
             label={t('flightStats.maxHeight')}
-            value={formatAltitude(flight.maxAltitude, unitSystem, locale)}
+            value={formatAltitude(flight.maxAltitude, unitPrefs.altitude, locale)}
             icon={<AltitudeIcon />}
           />
         </div>
         <div className="flex-1 min-w-[120px] md:min-w-0">
           <StatCard
             label={t('flightStats.maxSpeed')}
-            value={formatSpeed(flight.maxSpeed, unitSystem, locale)}
+            value={formatSpeed(flight.maxSpeed, unitPrefs.speed, locale)}
             icon={<SpeedIcon />}
           />
         </div>
@@ -406,7 +403,8 @@ export function FlightStats({ data }: FlightStatsProps) {
           lat={flight.homeLat}
           lon={flight.homeLon}
           startTime={flight.startTime}
-          unitSystem={unitSystem}
+          temperatureUnit={unitPrefs.temperature}
+          speedUnit={unitPrefs.speed}
         />
       )}
     </div>

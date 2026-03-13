@@ -78,7 +78,7 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
   const datePickerRef = useRef<HTMLDivElement>(null);
 
   const { t } = useTranslation();
-  const { unitSystem, dateLocale, appLanguage, loadFlights, loadOverview, loadAllTags, themeMode } = useFlightStore();
+  const { unitPrefs, dateLocale, appLanguage, loadFlights, loadOverview, loadAllTags, themeMode } = useFlightStore();
   const isLight = resolveThemeMode(themeMode) === 'light';
 
   // Reset form when modal opens
@@ -132,7 +132,7 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
     } else if (!/^\d{2}:\d{2}:\d{2}$/.test(formData.time)) {
       newErrors.time = t('manual.hhmmssFormat');
     }
-    
+
     const duration = parseFloat(formData.durationSecs);
     if (!formData.durationSecs || isNaN(duration) || duration <= 0) {
       newErrors.durationSecs = t('manual.requiredPositive');
@@ -187,7 +187,7 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
         const distance = parseFloat(formData.totalDistance);
         if (!isNaN(distance)) {
           // If imperial, convert from feet to meters
-          totalDistanceMeters = unitSystem === 'imperial' ? distance * 0.3048 : distance;
+          totalDistanceMeters = unitPrefs.distance === 'imperial' ? distance * 0.3048 : distance;
         }
       }
 
@@ -195,7 +195,7 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
         const altitude = parseFloat(formData.maxAltitude);
         if (!isNaN(altitude)) {
           // If imperial, convert from feet to meters
-          maxAltitudeMeters = unitSystem === 'imperial' ? altitude * 0.3048 : altitude;
+          maxAltitudeMeters = unitPrefs.altitude === 'imperial' ? altitude * 0.3048 : altitude;
         }
       }
 
@@ -252,8 +252,8 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
 
   if (!isOpen) return null;
 
-  const distanceUnit = unitSystem === 'imperial' ? 'ft' : 'm';
-  const altitudeUnit = unitSystem === 'imperial' ? 'ft' : 'm';
+  const distanceUnit = unitPrefs.distance === 'imperial' ? 'ft' : 'm';
+  const altitudeUnit = unitPrefs.altitude === 'imperial' ? 'ft' : 'm';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden">
@@ -284,11 +284,10 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
           {/* Message */}
           {message && (
             <div
-              className={`p-3 rounded-lg text-sm ${
-                message.type === 'success'
+              className={`p-3 rounded-lg text-sm ${message.type === 'success'
                   ? 'bg-green-900/50 text-green-300 border border-green-700'
                   : 'bg-red-900/50 text-red-300 border border-red-700'
-              }`}
+                }`}
             >
               {message.text}
             </div>
@@ -320,9 +319,8 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
                 value={formData.aircraftName}
                 onChange={(e) => handleFieldChange('aircraftName', e.target.value)}
                 placeholder={t('manual.placeholderAircraft')}
-                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${
-                  errors.aircraftName ? 'border-red-500' : 'border-gray-600'
-                }`}
+                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${errors.aircraftName ? 'border-red-500' : 'border-gray-600'
+                  }`}
               />
               {errors.aircraftName && <p className="mt-1 text-xs text-red-400">{errors.aircraftName}</p>}
             </div>
@@ -340,9 +338,8 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
                 value={formData.droneSerial}
                 onChange={(e) => handleFieldChange('droneSerial', e.target.value)}
                 placeholder={t('manual.placeholderAircraftSN')}
-                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${
-                  errors.droneSerial ? 'border-red-500' : 'border-gray-600'
-                }`}
+                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${errors.droneSerial ? 'border-red-500' : 'border-gray-600'
+                  }`}
               />
               {errors.droneSerial && <p className="mt-1 text-xs text-red-400">{errors.droneSerial}</p>}
             </div>
@@ -357,9 +354,8 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
                 value={formData.batterySerial}
                 onChange={(e) => handleFieldChange('batterySerial', e.target.value)}
                 placeholder={t('manual.placeholderBatterySN')}
-                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${
-                  errors.batterySerial ? 'border-red-500' : 'border-gray-600'
-                }`}
+                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${errors.batterySerial ? 'border-red-500' : 'border-gray-600'
+                  }`}
               />
               {errors.batterySerial && <p className="mt-1 text-xs text-red-400">{errors.batterySerial}</p>}
             </div>
@@ -375,18 +371,17 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
               <button
                 type="button"
                 onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
-                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white text-left focus:outline-none focus:ring-1 focus:ring-drone-primary flex items-center justify-between ${
-                  errors.date ? 'border-red-500' : 'border-gray-600'
-                }`}
+                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white text-left focus:outline-none focus:ring-1 focus:ring-drone-primary flex items-center justify-between ${errors.date ? 'border-red-500' : 'border-gray-600'
+                  }`}
               >
                 <span className={formData.date ? '' : 'text-gray-500'}>
                   {formatDateDisplay(formData.date)}
                 </span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 opacity-60">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                  <line x1="16" y1="2" x2="16" y2="6"/>
-                  <line x1="8" y1="2" x2="8" y2="6"/>
-                  <line x1="3" y1="10" x2="21" y2="10"/>
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
                 </svg>
               </button>
               {isDatePickerOpen && (
@@ -396,11 +391,10 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
                     onClick={() => setIsDatePickerOpen(false)}
                   />
                   <div
-                    className={`absolute left-0 top-full mt-1 z-50 rounded-xl border p-3 shadow-xl ${
-                      isLight
+                    className={`absolute left-0 top-full mt-1 z-50 rounded-xl border p-3 shadow-xl ${isLight
                         ? 'bg-white border-gray-200'
                         : 'bg-drone-surface border-gray-700'
-                    }`}
+                      }`}
                   >
                     <DayPicker
                       mode="single"
@@ -438,9 +432,8 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
                     handleFieldChange('time', val);
                   }
                 }}
-                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-drone-primary ${
-                  errors.time ? 'border-red-500' : 'border-gray-600'
-                }`}
+                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-drone-primary ${errors.time ? 'border-red-500' : 'border-gray-600'
+                  }`}
               />
               {errors.time && <p className="mt-1 text-xs text-red-400">{errors.time}</p>}
               <p className="mt-1 text-xs text-gray-500">{t('manual.hint24h')}</p>
@@ -460,9 +453,8 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
                 value={formData.totalDistance}
                 onChange={(e) => handleFieldChange('totalDistance', filterNumericInput(e.target.value, false))}
                 placeholder={t('manual.placeholderOptional', { defaultValue: 'Optional' })}
-                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${
-                  errors.totalDistance ? 'border-red-500' : 'border-gray-600'
-                }`}
+                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${errors.totalDistance ? 'border-red-500' : 'border-gray-600'
+                  }`}
               />
               {errors.totalDistance && <p className="mt-1 text-xs text-red-400">{errors.totalDistance}</p>}
             </div>
@@ -478,9 +470,8 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
                 value={formData.maxAltitude}
                 onChange={(e) => handleFieldChange('maxAltitude', filterNumericInput(e.target.value, false))}
                 placeholder={t('manual.placeholderOptional', { defaultValue: 'Optional' })}
-                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${
-                  errors.maxAltitude ? 'border-red-500' : 'border-gray-600'
-                }`}
+                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${errors.maxAltitude ? 'border-red-500' : 'border-gray-600'
+                  }`}
               />
               {errors.maxAltitude && <p className="mt-1 text-xs text-red-400">{errors.maxAltitude}</p>}
             </div>
@@ -499,9 +490,8 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
                 value={formData.homeLat}
                 onChange={(e) => handleFieldChange('homeLat', filterNumericInput(e.target.value, true))}
                 placeholder={t('manual.placeholderLat')}
-                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${
-                  errors.homeLat ? 'border-red-500' : 'border-gray-600'
-                }`}
+                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${errors.homeLat ? 'border-red-500' : 'border-gray-600'
+                  }`}
               />
               {errors.homeLat && <p className="mt-1 text-xs text-red-400">{errors.homeLat}</p>}
               <p className="mt-1 text-xs text-gray-500">-90 to 90</p>
@@ -518,9 +508,8 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
                 value={formData.homeLon}
                 onChange={(e) => handleFieldChange('homeLon', filterNumericInput(e.target.value, true))}
                 placeholder={t('manual.placeholderLon')}
-                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${
-                  errors.homeLon ? 'border-red-500' : 'border-gray-600'
-                }`}
+                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${errors.homeLon ? 'border-red-500' : 'border-gray-600'
+                  }`}
               />
               {errors.homeLon && <p className="mt-1 text-xs text-red-400">{errors.homeLon}</p>}
               <p className="mt-1 text-xs text-gray-500">-180 to 180</p>
@@ -540,9 +529,8 @@ export function ManualEntryModal({ isOpen, onClose }: ManualEntryModalProps) {
                 value={formData.durationSecs}
                 onChange={(e) => handleFieldChange('durationSecs', filterNumericInput(e.target.value, false))}
                 placeholder={t('manual.placeholderDuration')}
-                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${
-                  errors.durationSecs ? 'border-red-500' : 'border-gray-600'
-                }`}
+                className={`w-full px-3 py-2 bg-drone-dark border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-drone-primary ${errors.durationSecs ? 'border-red-500' : 'border-gray-600'
+                  }`}
               />
               {errors.durationSecs && <p className="mt-1 text-xs text-red-400">{errors.durationSecs}</p>}
             </div>

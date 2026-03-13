@@ -21,7 +21,7 @@ import {
   formatDateNumeric,
   normalizeSerial,
   isDecommissioned,
-  type UnitSystem,
+  type UnitPreferences,
 } from '@/lib/utils';
 import { useFlightStore } from '@/stores/flightStore';
 import { FlightClusterMap } from './FlightClusterMap';
@@ -42,11 +42,11 @@ function resolveThemeMode(mode: 'system' | 'dark' | 'light'): 'dark' | 'light' {
 interface OverviewProps {
   stats: OverviewStats;
   flights: Flight[];
-  unitSystem: UnitSystem;
+  unitPrefs: UnitPreferences;
   onSelectFlight?: (flightId: number) => void;
 }
 
-export function Overview({ stats, flights, unitSystem, onSelectFlight }: OverviewProps) {
+export function Overview({ stats, flights, unitPrefs, onSelectFlight }: OverviewProps) {
   const { t } = useTranslation();
   const locale = useFlightStore((state) => state.locale);
   const dateLocale = useFlightStore((state) => state.dateLocale);
@@ -275,7 +275,7 @@ export function Overview({ stats, flights, unitSystem, onSelectFlight }: Overvie
       {/* Primary Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
         <StatCard label={t('overview.totalFlights')} value={filteredStats.totalFlights.toLocaleString(locale)} icon={<FlightIcon />} />
-        <StatCard label={t('overview.totalDistance')} value={formatDistance(filteredStats.totalDistanceM, unitSystem, locale)} icon={<DistanceIcon />} />
+        <StatCard label={t('overview.totalDistance')} value={formatDistance(filteredStats.totalDistanceM, unitPrefs.distance, locale)} icon={<DistanceIcon />} />
         <StatCard label={t('overview.totalTime')} value={formatDuration(filteredStats.totalDurationSecs)} icon={<ClockIcon />} />
         <StatCard label={t('overview.totalPhotos')} value={filteredStats.totalPhotos.toLocaleString(locale)} icon={<CameraIcon />} />
         <StatCard className="col-span-2 sm:col-span-1 md:col-span-1" label={t('overview.totalVideos')} value={filteredStats.totalVideos.toLocaleString(locale)} icon={<VideoIcon />} />
@@ -283,17 +283,17 @@ export function Overview({ stats, flights, unitSystem, onSelectFlight }: Overvie
 
       {/* Secondary Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-        <StatCard label={t('overview.maxAltitude')} value={formatAltitude(filteredStats.maxAltitudeM, unitSystem, locale)} icon={<AltitudeIcon />} small />
-        <StatCard label={t('overview.maxSpeedAchieved')} value={formatSpeed(filteredStats.maxSpeedMs, unitSystem, locale)} icon={<LightningIcon />} small />
+        <StatCard label={t('overview.maxAltitude')} value={formatAltitude(filteredStats.maxAltitudeM, unitPrefs.altitude, locale)} icon={<AltitudeIcon />} small />
+        <StatCard label={t('overview.maxSpeedAchieved')} value={formatSpeed(filteredStats.maxSpeedMs, unitPrefs.speed, locale)} icon={<LightningIcon />} small />
         <StatCard
           label={t('overview.maxDistFromHome')}
-          value={formatDistance(filteredStats.maxDistanceFromHomeM, unitSystem, locale)}
+          value={formatDistance(filteredStats.maxDistanceFromHomeM, unitPrefs.distance, locale)}
           icon={<HomeDistanceIcon />}
           small
         />
-        <StatCard label={t('overview.avgDistPerFlight')} value={formatDistance(avgDistancePerFlight, unitSystem, locale)} icon={<RouteIcon />} small />
+        <StatCard label={t('overview.avgDistPerFlight')} value={formatDistance(avgDistancePerFlight, unitPrefs.distance, locale)} icon={<RouteIcon />} small />
         <StatCard label={t('overview.avgDurationPerFlight')} value={formatDuration(avgDurationPerFlight)} icon={<TimerIcon />} small />
-        <StatCard label={t('overview.avgSpeed')} value={formatSpeed(avgSpeed, unitSystem, locale)} icon={<SpeedometerIcon />} small />
+        <StatCard label={t('overview.avgSpeed')} value={formatSpeed(avgSpeed, unitPrefs.speed, locale)} icon={<SpeedometerIcon />} small />
       </div>
 
       {/* Activity Heatmap + Drone Flight Time Row */}
@@ -381,7 +381,7 @@ export function Overview({ stats, flights, unitSystem, onSelectFlight }: Overvie
         <FlightClusterMap
           flights={filteredFlights}
           allFlights={flights}
-          unitSystem={unitSystem}
+          unitPrefs={unitPrefs}
           themeMode={themeMode}
           onSelectFlight={onSelectFlight}
           highlightedFlightId={overviewHighlightedFlightId}
@@ -464,7 +464,7 @@ export function Overview({ stats, flights, unitSystem, onSelectFlight }: Overvie
                       <p className="text-xs text-gray-400">{formatDateTime(flight.startTime, dateLocale, appLanguage, timeFormat !== '24h')}</p>
                     </div>
                     <div className="text-sm font-medium text-drone-accent">
-                      {formatDistance(flight.maxDistanceFromHomeM, unitSystem, locale)}
+                      {formatDistance(flight.maxDistanceFromHomeM, unitPrefs.distance, locale)}
                     </div>
                   </div>
                 ))}
@@ -516,20 +516,20 @@ export function Overview({ stats, flights, unitSystem, onSelectFlight }: Overvie
       )}
 
       {!donationAcknowledged && (
-      <div className="mt-6 mb-2 mx-auto max-w-4xl rounded-lg border border-gray-200 dark:border-gray-700/50 bg-gray-50 dark:bg-white/[0.03] px-5 py-4 sm:px-8">
-        <p className="text-center text-xs leading-relaxed text-gray-500 dark:text-gray-500 sm:text-sm">
-          {t('overview.donationNote')}{' '}
-          <a
-            href="https://ko-fi.com/arpandesign"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-amber-500 hover:text-amber-400 underline underline-offset-2"
-          >
-            Ko-fi
-          </a>
-          {' '}{t('overview.donationNoteSuffix')}
-        </p>
-      </div>
+        <div className="mt-6 mb-2 mx-auto max-w-4xl rounded-lg border border-gray-200 dark:border-gray-700/50 bg-gray-50 dark:bg-white/[0.03] px-5 py-4 sm:px-8">
+          <p className="text-center text-xs leading-relaxed text-gray-500 dark:text-gray-500 sm:text-sm">
+            {t('overview.donationNote')}{' '}
+            <a
+              href="https://ko-fi.com/arpandesign"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-amber-500 hover:text-amber-400 underline underline-offset-2"
+            >
+              Ko-fi
+            </a>
+            {' '}{t('overview.donationNoteSuffix')}
+          </p>
+        </div>
       )}
     </div>
   );
@@ -2543,7 +2543,7 @@ function MaintenanceSection({
         className={`rounded-lg transition-colors border ${isExpanded
           ? (isLight ? 'bg-gray-100 border-drone-primary/30' : 'bg-gray-700/30 border-drone-primary/30')
           : (isLight ? 'bg-gray-100/70 hover:bg-gray-100 border-transparent' : 'bg-gray-700/20 hover:bg-gray-700/30 border-transparent')
-        }`}
+          }`}
       >
         {/* Clickable header row */}
         <button
@@ -2556,7 +2556,7 @@ function MaintenanceSection({
               <div className={`flex items-center justify-center w-5 h-5 rounded transition-colors ${isExpanded
                 ? (isLight ? 'bg-drone-primary/15' : 'bg-drone-primary/20')
                 : (isLight ? 'bg-gray-200 group-hover:bg-gray-300' : 'bg-gray-600/40 group-hover:bg-gray-600/60')
-              }`}>
+                }`}>
                 <svg
                   width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
                   strokeLinecap="round" strokeLinejoin="round"

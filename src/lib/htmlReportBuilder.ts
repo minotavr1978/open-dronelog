@@ -8,7 +8,7 @@
 
 import type { Flight, FlightDataResponse, TelemetryData } from '@/types';
 import type { WeatherData } from '@/lib/weather';
-import { type UnitSystem, ensureAmPmUpperCase, formatDateDisplay, formatDateHeader as utilFormatDateHeader } from '@/lib/utils';
+import { type UnitSystem, type UnitPreferences, ensureAmPmUpperCase, formatDateDisplay, formatDateHeader as utilFormatDateHeader } from '@/lib/utils';
 
 // ============================================================================
 // Types
@@ -394,7 +394,7 @@ export interface ReportOptions {
   documentTitle: string;
   pilotName: string;
   fieldConfig: HtmlReportFieldConfig;
-  unitSystem: UnitSystem;
+  unitPrefs: UnitPreferences;
   locale?: string;
   dateLocale?: string;
   appLanguage?: string;
@@ -416,7 +416,7 @@ interface FlightColumn {
 function buildFlightColumns(
   fd: FlightReportData,
   fc: HtmlReportFieldConfig,
-  unitSystem: UnitSystem,
+  unitPrefs: UnitPreferences,
   locale?: string,
   dateLocale?: string,
   lang?: string,
@@ -458,12 +458,12 @@ function buildFlightColumns(
 
   // 3. Performance Column (Flight Stats + Battery merged)
   const perfItems: { label: string; value: string }[] = [];
-  if (fc.totalDistance) perfItems.push({ label: tr('report.distance', 'Distance'), value: esc(fmtDistance(fd.flight.totalDistance, unitSystem, locale)) });
-  if (fc.maxAltitude) perfItems.push({ label: tr('report.maxAlt', 'Max Alt.'), value: esc(fmtAltitude(fd.flight.maxAltitude, unitSystem, locale)) });
-  if (fc.maxSpeed) perfItems.push({ label: tr('report.maxSpeed', 'Max Speed'), value: esc(fmtSpeed(fd.flight.maxSpeed, unitSystem, locale)) });
+  if (fc.totalDistance) perfItems.push({ label: tr('report.distance', 'Distance'), value: esc(fmtDistance(fd.flight.totalDistance, unitPrefs.distance, locale)) });
+  if (fc.maxAltitude) perfItems.push({ label: tr('report.maxAlt', 'Max Alt.'), value: esc(fmtAltitude(fd.flight.maxAltitude, unitPrefs.altitude, locale)) });
+  if (fc.maxSpeed) perfItems.push({ label: tr('report.maxSpeed', 'Max Speed'), value: esc(fmtSpeed(fd.flight.maxSpeed, unitPrefs.speed, locale)) });
   if (fc.maxDistanceFromHome) {
     const d = calculateMaxDistanceFromHome(fd.data.telemetry);
-    perfItems.push({ label: tr('report.maxDistHome', 'Max Dist. Home'), value: esc(fmtDistance(d, unitSystem, locale)) });
+    perfItems.push({ label: tr('report.maxDistHome', 'Max Dist. Home'), value: esc(fmtDistance(d, unitPrefs.distance, locale)) });
   }
   if (fc.takeoffBattery) {
     const b = fd.data.telemetry.battery;
@@ -508,7 +508,7 @@ function buildFlightColumns(
     const t = fd.data.telemetry.batteryTemp;
     const first = t?.find((val) => val !== null);
     if (first != null) {
-      perfItems.push({ label: tr('report.batTemp', 'Bat. Temp'), value: unitSystem === 'imperial' ? `${(first * 9 / 5 + 32).toFixed(1)} °F` : `${first.toFixed(1)} °C` });
+      perfItems.push({ label: tr('report.batTemp', 'Bat. Temp'), value: unitPrefs.temperature === 'imperial' ? `${(first * 9 / 5 + 32).toFixed(1)} °F` : `${first.toFixed(1)} °C` });
     } else {
       perfItems.push({ label: tr('report.batTemp', 'Bat. Temp'), value: '—' });
     }
@@ -518,13 +518,13 @@ function buildFlightColumns(
   // 4. Weather Column
   const wxItems: { label: string; value: string }[] = [];
   if (fc.weatherCondition) wxItems.push({ label: tr('report.condition', 'Condition'), value: esc(fd.weather?.conditionLabel ?? '—') });
-  if (fc.temperature) wxItems.push({ label: tr('report.temperature', 'Temperature'), value: fd.weather ? esc(fmtTemp(fd.weather.temperature, unitSystem, locale)) : '—' });
-  if (fc.windSpeed) wxItems.push({ label: tr('report.wind', 'Wind'), value: fd.weather ? esc(fmtWindSpeed(fd.weather.windSpeed, unitSystem, locale)) : '—' });
-  if (fc.windGusts) wxItems.push({ label: tr('report.gusts', 'Gusts'), value: fd.weather ? esc(fmtWindSpeed(fd.weather.windGusts, unitSystem, locale)) : '—' });
+  if (fc.temperature) wxItems.push({ label: tr('report.temperature', 'Temperature'), value: fd.weather ? esc(fmtTemp(fd.weather.temperature, unitPrefs.temperature, locale)) : '—' });
+  if (fc.windSpeed) wxItems.push({ label: tr('report.wind', 'Wind'), value: fd.weather ? esc(fmtWindSpeed(fd.weather.windSpeed, unitPrefs.speed, locale)) : '—' });
+  if (fc.windGusts) wxItems.push({ label: tr('report.gusts', 'Gusts'), value: fd.weather ? esc(fmtWindSpeed(fd.weather.windGusts, unitPrefs.speed, locale)) : '—' });
   if (fc.humidity) wxItems.push({ label: tr('report.humidity', 'Humidity'), value: fd.weather && fd.weather.humidity != null ? `${fd.weather.humidity}%` : '—' });
   if (fc.cloudCover) wxItems.push({ label: tr('report.clouds', 'Clouds'), value: fd.weather && fd.weather.cloudCover != null ? `${fd.weather.cloudCover}%` : '—' });
-  if (fc.precipitation) wxItems.push({ label: tr('report.precipitation', 'Precipitation'), value: fd.weather ? esc(fmtPrecip(fd.weather.precipitation, unitSystem, locale)) : '—' });
-  if (fc.pressure) wxItems.push({ label: tr('report.pressure', 'Pressure'), value: fd.weather ? esc(fmtPressure(fd.weather.pressure, unitSystem, locale)) : '—' });
+  if (fc.precipitation) wxItems.push({ label: tr('report.precipitation', 'Precipitation'), value: fd.weather ? esc(fmtPrecip(fd.weather.precipitation, unitPrefs.speed, locale)) : '—' });
+  if (fc.pressure) wxItems.push({ label: tr('report.pressure', 'Pressure'), value: fd.weather ? esc(fmtPressure(fd.weather.pressure, unitPrefs.speed, locale)) : '—' });
   if (wxItems.length > 0 && wxItems.some((i) => i.value !== '—')) columns.push({ isStacked: false, groups: [{ group: tr('report.weatherGroup', 'Weather'), items: wxItems }] });
 
   // 5. Stacked Column (Tags over Media)
@@ -581,7 +581,7 @@ export function buildHtmlReport(
     documentTitle,
     pilotName,
     fieldConfig: fc,
-    unitSystem,
+    unitPrefs,
     locale,
     dateLocale,
     appLanguage,
@@ -873,7 +873,7 @@ export function buildHtmlReport(
       <div><strong>${esc(tr('report.pilot', 'Pilot:'))}</strong> ${esc(pilotName)}</div>
       <div><strong>${esc(tr('report.reportedFlights', 'Reported Flights:'))}</strong> ${totalFlights}</div>
       <div><strong>${esc(tr('report.totalAirTime', 'Total Air Time:'))}</strong> ${esc(fmtDuration(totalDuration))}</div>
-      <div><strong>${esc(tr('overview.totalDistance', 'Total Distance:'))}</strong> ${esc(fmtDistance(totalDistanceM, unitSystem, locale))}</div>
+      <div><strong>${esc(tr('overview.totalDistance', 'Total Distance:'))}</strong> ${esc(fmtDistance(totalDistanceM, unitPrefs.distance, locale))}</div>
       <div><strong>${esc(tr('report.generated', 'Generated:'))}</strong> ${esc(now)}</div>
     </div>
   </div>
@@ -889,7 +889,7 @@ export function buildHtmlReport(
       <div class="label">${esc(tr('report.totalAirTime', 'Total Air Time:').replace(':', ''))}</div>
     </div>
     <div class="summary-card">
-      <div class="value">${esc(fmtDistance(totalDistanceM, unitSystem, locale))}</div>
+      <div class="value">${esc(fmtDistance(totalDistanceM, unitPrefs.distance, locale))}</div>
       <div class="label">${esc(tr('overview.totalDistance', 'Total Distance'))}</div>
     </div>
     <div class="summary-card">
@@ -911,7 +911,7 @@ export function buildHtmlReport(
 
     for (const fd of day.flights) {
       globalFlightIndex++;
-      const flightColumns = buildFlightColumns(fd, fc, unitSystem, locale, dateLocale, lang, hour12, t);
+      const flightColumns = buildFlightColumns(fd, fc, unitPrefs, locale, dateLocale, lang, hour12, t);
       const headerLabel = fd.flight.displayName || fd.flight.fileName || `Flight ${globalFlightIndex}`;
 
       html += `  <div class="flight-card">
@@ -957,7 +957,7 @@ export function buildHtmlReport(
       ? tr('report.flightCount_one', '1 flight').replace('{{count}}', '1')
       : tr('report.flightCount_other', '{{count}} flights').replace('{{count}}', String(day.flights.length));
 
-    html += `  <div class="subtotal">${esc(tr('report.subtotal', 'Subtotal:'))} ${esc(dayFlightCountLabel)} · ${esc(fmtDuration(dayDuration))} · ${esc(fmtDistance(dayDistance, unitSystem, locale))}</div>\n`;
+    html += `  <div class="subtotal">${esc(tr('report.subtotal', 'Subtotal:'))} ${esc(dayFlightCountLabel)} · ${esc(fmtDuration(dayDuration))} · ${esc(fmtDistance(dayDistance, unitPrefs.distance, locale))}</div>\n`;
   }
 
   // Grand total
@@ -965,7 +965,7 @@ export function buildHtmlReport(
     ? tr('report.flightCount_one', '1 flight').replace('{{count}}', '1')
     : tr('report.flightCount_other', '{{count}} flights').replace('{{count}}', String(totalFlights));
 
-  html += `  <div class="grand-total">${esc(tr('report.grandTotal', 'Grand Total:'))} ${esc(totalFlightCountLabel)} · ${esc(fmtDuration(totalDuration))} · ${esc(fmtDistance(totalDistanceM, unitSystem, locale))}</div>\n`;
+  html += `  <div class="grand-total">${esc(tr('report.grandTotal', 'Grand Total:'))} ${esc(totalFlightCountLabel)} · ${esc(fmtDuration(totalDuration))} · ${esc(fmtDistance(totalDistanceM, unitPrefs.distance, locale))}</div>\n`;
 
   // Footer
   html += `

@@ -24,7 +24,7 @@ export function Dashboard() {
     isLoading,
     flights,
     isFlightsInitialized,
-    unitSystem,
+    unitPrefs,
     themeMode,
     loadOverview,
     supporterBadgeActive,
@@ -482,7 +482,7 @@ export function Dashboard() {
               <Overview
                 stats={overviewStats}
                 flights={flights}
-                unitSystem={unitSystem}
+                unitPrefs={unitPrefs}
                 onSelectFlight={(flightId) => {
                   setActiveView('flights');
                   useFlightStore.getState().selectFlight(flightId);
@@ -574,7 +574,7 @@ export function Dashboard() {
                       >
                         <TelemetryCharts
                           data={currentFlightData!.telemetry}
-                          unitSystem={unitSystem}
+                          unitPrefs={unitPrefs}
                           startTime={currentFlightData!.flight.startTime}
                         />
                       </div>

@@ -130,7 +130,7 @@ export function FlightList({
     updateFlightName,
     updateFlightNotes,
     updateFlightColor,
-    unitSystem,
+    unitPrefs,
     locale,
     dateLocale,
     appLanguage,
@@ -1404,7 +1404,7 @@ export function FlightList({
         documentTitle: config.documentTitle,
         pilotName: config.pilotName,
         fieldConfig: config.fieldConfig,
-        unitSystem,
+        unitPrefs,
         locale,
         dateLocale,
         appLanguage,
@@ -1871,7 +1871,7 @@ export function FlightList({
                           {(() => {
                             const lo = altitudeFilterMin ?? altitudeRange.min;
                             const hi = altitudeFilterMax ?? altitudeRange.max;
-                            const fmt = (m: number) => unitSystem === 'imperial' ? `${Math.round(m * 3.28084)}ft` : `${m}m`;
+                            const fmt = (m: number) => unitPrefs.altitude === 'imperial' ? `${Math.round(m * 3.28084)}ft` : `${m}m`;
                             if (altitudeFilterMin === null && altitudeFilterMax === null) return t('flightList.any');
                             return `${fmt(lo)}–${fmt(hi)}`;
                           })()}
@@ -1929,7 +1929,7 @@ export function FlightList({
                             const lo = distanceFilterMin ?? distanceRange.min;
                             const hi = distanceFilterMax ?? distanceRange.max;
                             const fmt = (m: number) => {
-                              if (unitSystem === 'imperial') {
+                              if (unitPrefs.distance === 'imperial') {
                                 const miles = m * 0.000621371;
                                 return miles >= 1 ? `${miles.toFixed(1)}mi` : `${Math.round(m * 3.28084)}ft`;
                               }
@@ -2196,98 +2196,98 @@ export function FlightList({
 
                     {/* Controller filter */}
                     {controllerOptions.length > 0 && (
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-gray-400 whitespace-nowrap w-[52px] flex-shrink-0">{t('flightList.controller')}</label>
-                      <div className="relative flex-1 min-w-0">
-                        <button
-                          ref={controllerBtnRef}
-                          type="button"
-                          onClick={() => setIsControllerDropdownOpen((v) => !v)}
-                          className="input w-full text-xs h-8 px-3 py-1.5 flex items-center justify-between gap-2"
-                        >
-                          <span className={`truncate ${selectedControllers.length > 0 ? 'text-gray-100' : 'text-gray-400'}`}>
-                            {selectedControllers.length > 0
-                              ? selectedControllers.join(', ')
-                              : t('flightList.allControllers')}
-                          </span>
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><polyline points="6 9 12 15 18 9" /></svg>
-                        </button>
-                        {isControllerDropdownOpen && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-40"
-                              onClick={() => { setIsControllerDropdownOpen(false); setControllerSearch(''); }}
-                            />
-                            <div
-                              ref={controllerDropdownRef}
-                              className="fixed z-50 max-h-56 rounded-lg border border-gray-700 bg-drone-surface shadow-xl flex flex-col overflow-hidden"
-                              style={(() => { const r = controllerBtnRef.current?.getBoundingClientRect(); return r ? { top: r.bottom + 4, left: r.left, width: r.width } : {}; })()}
-                            >
-                              {controllerOptions.length > 4 && (
-                                <div className="px-2 pt-2 pb-1 border-b border-gray-700 flex-shrink-0">
-                                  <input
-                                    type="text"
-                                    value={controllerSearch}
-                                    onChange={(e) => { setControllerSearch(e.target.value); setControllerHighlightedIndex(0); }}
-                                    onKeyDown={(e) => {
-                                      const sorted = getControllerSorted();
-                                      if (e.key === 'ArrowDown') { e.preventDefault(); setControllerHighlightedIndex((prev) => prev < sorted.length - 1 ? prev + 1 : 0); }
-                                      else if (e.key === 'ArrowUp') { e.preventDefault(); setControllerHighlightedIndex((prev) => prev > 0 ? prev - 1 : sorted.length - 1); }
-                                      else if (e.key === 'Enter' && sorted.length > 0) {
-                                        e.preventDefault();
-                                        const item = sorted[controllerHighlightedIndex];
-                                        if (item && (availableControllerSerials.has(item.value) || selectedControllers.includes(item.value))) setSelectedControllers((prev) => prev.includes(item.value) ? prev.filter((k) => k !== item.value) : [...prev, item.value]);
-                                      } else if (e.key === 'Escape') { e.preventDefault(); setIsControllerDropdownOpen(false); setControllerSearch(''); }
-                                    }}
-                                    placeholder={t('flightList.searchControllers')}
-                                    autoFocus
-                                    className="w-full bg-drone-dark text-xs text-gray-200 rounded px-2 py-1 border border-gray-600 focus:border-drone-primary focus:outline-none placeholder-gray-500"
-                                  />
-                                </div>
-                              )}
-                              <div className="overflow-auto flex-1">
-                                {(() => {
-                                  const sorted = getControllerSorted();
-                                  if (sorted.length === 0) return <p className="text-xs text-gray-500 px-3 py-2">{t('flightList.noMatchingControllers')}</p>;
-                                  return sorted.map((ctrl, index) => {
-                                    const isSelected = selectedControllers.includes(ctrl.value);
-                                    const isAvailable = availableControllerSerials.has(ctrl.value);
-                                    const isDisabled = !isSelected && !isAvailable;
-                                    return (
-                                      <button
-                                        key={ctrl.value}
-                                        type="button"
-                                        onClick={() => !isDisabled && setSelectedControllers((prev) => isSelected ? prev.filter((k) => k !== ctrl.value) : [...prev, ctrl.value])}
-                                        onMouseEnter={() => !isDisabled && setControllerHighlightedIndex(index)}
-                                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors ${isDisabled ? 'opacity-35 cursor-default' : isSelected ? 'bg-purple-500/20 text-gray-800 dark:text-purple-200' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
-                                          } ${!isDisabled && index === controllerHighlightedIndex && !isSelected ? 'bg-gray-200/50 dark:bg-gray-700/50' : ''}`}
-                                      >
-                                        <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-purple-500 bg-purple-500' : 'border-gray-400 dark:border-gray-600'
-                                          }`}>
-                                          {isSelected && (
-                                            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                                          )}
-                                        </span>
-                                        <span className="truncate">{ctrl.label}</span>
-                                      </button>
-                                    );
-                                  });
-                                })()}
-                                {selectedControllers.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => { setSelectedControllers([]); setControllerSearch(''); setIsControllerDropdownOpen(false); }}
-                                    className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-white border-t border-gray-700"
-                                  >
-                                    {t('flightList.clearControllerFilter')}
-                                  </button>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-gray-400 whitespace-nowrap w-[52px] flex-shrink-0">{t('flightList.controller')}</label>
+                        <div className="relative flex-1 min-w-0">
+                          <button
+                            ref={controllerBtnRef}
+                            type="button"
+                            onClick={() => setIsControllerDropdownOpen((v) => !v)}
+                            className="input w-full text-xs h-8 px-3 py-1.5 flex items-center justify-between gap-2"
+                          >
+                            <span className={`truncate ${selectedControllers.length > 0 ? 'text-gray-100' : 'text-gray-400'}`}>
+                              {selectedControllers.length > 0
+                                ? selectedControllers.join(', ')
+                                : t('flightList.allControllers')}
+                            </span>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><polyline points="6 9 12 15 18 9" /></svg>
+                          </button>
+                          {isControllerDropdownOpen && (
+                            <>
+                              <div
+                                className="fixed inset-0 z-40"
+                                onClick={() => { setIsControllerDropdownOpen(false); setControllerSearch(''); }}
+                              />
+                              <div
+                                ref={controllerDropdownRef}
+                                className="fixed z-50 max-h-56 rounded-lg border border-gray-700 bg-drone-surface shadow-xl flex flex-col overflow-hidden"
+                                style={(() => { const r = controllerBtnRef.current?.getBoundingClientRect(); return r ? { top: r.bottom + 4, left: r.left, width: r.width } : {}; })()}
+                              >
+                                {controllerOptions.length > 4 && (
+                                  <div className="px-2 pt-2 pb-1 border-b border-gray-700 flex-shrink-0">
+                                    <input
+                                      type="text"
+                                      value={controllerSearch}
+                                      onChange={(e) => { setControllerSearch(e.target.value); setControllerHighlightedIndex(0); }}
+                                      onKeyDown={(e) => {
+                                        const sorted = getControllerSorted();
+                                        if (e.key === 'ArrowDown') { e.preventDefault(); setControllerHighlightedIndex((prev) => prev < sorted.length - 1 ? prev + 1 : 0); }
+                                        else if (e.key === 'ArrowUp') { e.preventDefault(); setControllerHighlightedIndex((prev) => prev > 0 ? prev - 1 : sorted.length - 1); }
+                                        else if (e.key === 'Enter' && sorted.length > 0) {
+                                          e.preventDefault();
+                                          const item = sorted[controllerHighlightedIndex];
+                                          if (item && (availableControllerSerials.has(item.value) || selectedControllers.includes(item.value))) setSelectedControllers((prev) => prev.includes(item.value) ? prev.filter((k) => k !== item.value) : [...prev, item.value]);
+                                        } else if (e.key === 'Escape') { e.preventDefault(); setIsControllerDropdownOpen(false); setControllerSearch(''); }
+                                      }}
+                                      placeholder={t('flightList.searchControllers')}
+                                      autoFocus
+                                      className="w-full bg-drone-dark text-xs text-gray-200 rounded px-2 py-1 border border-gray-600 focus:border-drone-primary focus:outline-none placeholder-gray-500"
+                                    />
+                                  </div>
                                 )}
+                                <div className="overflow-auto flex-1">
+                                  {(() => {
+                                    const sorted = getControllerSorted();
+                                    if (sorted.length === 0) return <p className="text-xs text-gray-500 px-3 py-2">{t('flightList.noMatchingControllers')}</p>;
+                                    return sorted.map((ctrl, index) => {
+                                      const isSelected = selectedControllers.includes(ctrl.value);
+                                      const isAvailable = availableControllerSerials.has(ctrl.value);
+                                      const isDisabled = !isSelected && !isAvailable;
+                                      return (
+                                        <button
+                                          key={ctrl.value}
+                                          type="button"
+                                          onClick={() => !isDisabled && setSelectedControllers((prev) => isSelected ? prev.filter((k) => k !== ctrl.value) : [...prev, ctrl.value])}
+                                          onMouseEnter={() => !isDisabled && setControllerHighlightedIndex(index)}
+                                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 transition-colors ${isDisabled ? 'opacity-35 cursor-default' : isSelected ? 'bg-purple-500/20 text-gray-800 dark:text-purple-200' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200/50 dark:hover:bg-gray-700/50'
+                                            } ${!isDisabled && index === controllerHighlightedIndex && !isSelected ? 'bg-gray-200/50 dark:bg-gray-700/50' : ''}`}
+                                        >
+                                          <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? 'border-purple-500 bg-purple-500' : 'border-gray-400 dark:border-gray-600'
+                                            }`}>
+                                            {isSelected && (
+                                              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                                            )}
+                                          </span>
+                                          <span className="truncate">{ctrl.label}</span>
+                                        </button>
+                                      );
+                                    });
+                                  })()}
+                                  {selectedControllers.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => { setSelectedControllers([]); setControllerSearch(''); setIsControllerDropdownOpen(false); }}
+                                      className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-white border-t border-gray-700"
+                                    >
+                                      {t('flightList.clearControllerFilter')}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          </>
-                        )}
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
                     )}
 
                     {/* Tag filter */}
@@ -3054,8 +3054,8 @@ export function FlightList({
                       flight.displayName || flight.fileName,
                       `Start: ${formatDateTime(flight.startTime, dateLocale, appLanguage, hour12)}`,
                       `Duration: ${formatDuration(flight.durationSecs)}`,
-                      `Distance: ${formatDistance(flight.totalDistance, unitSystem, locale)}`,
-                      `Max Altitude: ${formatAltitude(flight.maxAltitude, unitSystem, locale)}`,
+                      `Distance: ${formatDistance(flight.totalDistance, unitPrefs.distance, locale)}`,
+                      `Max Altitude: ${formatAltitude(flight.maxAltitude, unitPrefs.altitude, locale)}`,
                       flight.notes ? `Notes: ${flight.notes}` : null
                     ].filter(Boolean).join('\n')}
                   >
@@ -3093,7 +3093,7 @@ export function FlightList({
                 <p className="text-xs text-gray-500 mt-0.5 truncate">
                   {formatDateTime(flight.startTime, dateLocale, appLanguage, hour12)}
                   {flight.durationSecs ? ` · ${formatDuration(flight.durationSecs)}` : ''}
-                  {flight.totalDistance ? ` · ${formatDistance(flight.totalDistance, unitSystem, locale)}` : ''}
+                  {flight.totalDistance ? ` · ${formatDistance(flight.totalDistance, unitPrefs.distance, locale)}` : ''}
                 </p>
               )}
 
@@ -3423,7 +3423,7 @@ export function FlightList({
         return (
           <FlyCardGenerator
             flight={flyCardFlight}
-            unitSystem={unitSystem}
+            unitPrefs={unitPrefs}
             onClose={() => setFlyCardFlightId(null)}
           />
         );

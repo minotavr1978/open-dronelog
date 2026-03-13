@@ -48,8 +48,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [autoLogout, setAutoLogout] = useState(false);
 
   const {
-    unitSystem,
-    setUnitSystem,
+    unitPrefs,
+    setUnitPref,
     locale,
     setLocale,
     dateLocale,
@@ -92,6 +92,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [showBadgeModal, setShowBadgeModal] = useState(false);
   const [badgeCode, setBadgeCode] = useState('');
   const [badgeMessage, setBadgeMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [unitsDropdownOpen, setUnitsDropdownOpen] = useState(false);
+
+  // Derive light/dark for theme-aware styling
+  const isLight = themeMode === 'light' || (themeMode === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: light)').matches);
 
   const handleActivateBadge = async () => {
     setBadgeMessage(null);
@@ -362,19 +366,95 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             <div className="md:w-1/2 space-y-4 md:pr-5">
               {/* Units + Theme + Time Format — stack on mobile */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div className="flex flex-col gap-1 col-span-2 sm:col-span-1">
-                  <label className="text-xs font-medium text-gray-400">
-                    {t('settings.units')}
-                  </label>
-                  <Select
-                    value={unitSystem}
-                    onChange={(v) => setUnitSystem(v as 'metric' | 'imperial')}
-                    options={[
-                      { value: 'metric', label: t('settings.metric') },
-                      { value: 'imperial', label: t('settings.imperial') },
-                    ]}
-                  />
-                </div>
+                {/* Units — custom dropdown with per-dimension toggles inside */}
+                {(() => {
+                  const allMetric = Object.values(unitPrefs).every(v => v === 'metric');
+                  const allImperial = Object.values(unitPrefs).every(v => v === 'imperial');
+                  const summaryLabel = allMetric
+                    ? `${t('settings.metric')} (m, km/h)`
+                    : allImperial
+                      ? `${t('settings.imperial')} (ft, mph)`
+                      : t('settings.mixed', 'Mixed');
+                  const unitRows: { key: 'distance' | 'speed' | 'altitude' | 'temperature'; label: string; metricLabel: string; imperialLabel: string }[] = [
+                    { key: 'distance', label: t('settings.unitDistance', 'Distance'), metricLabel: 'km', imperialLabel: 'mi' },
+                    { key: 'speed', label: t('settings.unitSpeed', 'Speed'), metricLabel: 'km/h', imperialLabel: 'mph' },
+                    { key: 'altitude', label: t('settings.unitAltitude', 'Altitude'), metricLabel: 'm', imperialLabel: 'ft' },
+                    { key: 'temperature', label: t('settings.unitTemperature', 'Temperature'), metricLabel: '°C', imperialLabel: '°F' },
+                  ];
+                  return (
+                    <div className="flex flex-col gap-1 col-span-2 sm:col-span-1 relative">
+                      <label className="text-xs font-medium text-gray-400">{t('settings.units')}</label>
+                      {/* Trigger button styled like Select */}
+                      <button
+                        type="button"
+                        onClick={() => setUnitsDropdownOpen(v => !v)}
+                        className={`flex items-center justify-between w-full h-[34px] px-2.5 rounded-lg border text-[13px] transition-colors ${isLight
+                          ? 'bg-white border-gray-300 text-gray-800 hover:border-gray-400'
+                          : 'bg-drone-dark border-gray-600 text-gray-200 hover:border-gray-500'
+                          }`}
+                      >
+                        <span className="truncate">{summaryLabel}</span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 ml-1 opacity-50">
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                      {/* Dropdown popover */}
+                      {unitsDropdownOpen && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setUnitsDropdownOpen(false)} />
+                          <div className={`absolute left-0 top-full mt-1 z-50 w-56 rounded-lg border shadow-xl overflow-hidden ${isLight
+                            ? 'bg-white border-gray-300'
+                            : 'bg-drone-surface border-gray-600'
+                            }`}>
+                            {/* Bulk set buttons */}
+                            <div className={`flex gap-1 p-2 border-b ${isLight ? 'border-gray-200' : 'border-gray-700'}`}>
+                              <button
+                                type="button"
+                                onClick={() => { for (const k of ['distance', 'speed', 'altitude', 'temperature'] as const) setUnitPref(k, 'metric'); }}
+                                className={`flex-1 text-[11px] font-medium py-1 rounded-md transition-colors ${allMetric
+                                  ? 'bg-drone-primary text-white'
+                                  : isLight ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-gray-700/50 text-gray-300 hover:bg-gray-700'
+                                  }`}
+                              >{t('settings.allMetric', 'All Metric')}</button>
+                              <button
+                                type="button"
+                                onClick={() => { for (const k of ['distance', 'speed', 'altitude', 'temperature'] as const) setUnitPref(k, 'imperial'); }}
+                                className={`flex-1 text-[11px] font-medium py-1 rounded-md transition-colors ${allImperial
+                                  ? 'bg-drone-primary text-white'
+                                  : isLight ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-gray-700/50 text-gray-300 hover:bg-gray-700'
+                                  }`}
+                              >{t('settings.allImperial', 'All Imperial')}</button>
+                            </div>
+                            {/* Per-dimension toggles */}
+                            {unitRows.map(({ key, label, metricLabel, imperialLabel }) => (
+                              <div key={key} className={`flex items-center justify-between px-3 py-[6px] border-b last:border-b-0 ${isLight ? 'border-gray-100' : 'border-gray-700/40'}`}>
+                                <span className={`text-[11px] ${isLight ? 'text-gray-600' : 'text-gray-400'}`}>{label}</span>
+                                <div className={`flex rounded-md overflow-hidden border ${isLight ? 'border-gray-300' : 'border-gray-600'}`}>
+                                  <button
+                                    type="button"
+                                    onClick={() => setUnitPref(key, 'metric')}
+                                    className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${unitPrefs[key] === 'metric'
+                                      ? 'bg-drone-primary text-white'
+                                      : isLight ? 'bg-transparent text-gray-500 hover:text-gray-700' : 'bg-transparent text-gray-400 hover:text-gray-200'
+                                      }`}
+                                  >{metricLabel}</button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setUnitPref(key, 'imperial')}
+                                    className={`px-2 py-0.5 text-[10px] font-medium transition-colors border-l ${isLight ? 'border-gray-300' : 'border-gray-600'} ${unitPrefs[key] === 'imperial'
+                                      ? 'bg-drone-primary text-white'
+                                      : isLight ? 'bg-transparent text-gray-500 hover:text-gray-700' : 'bg-transparent text-gray-400 hover:text-gray-200'
+                                      }`}
+                                  >{imperialLabel}</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-gray-400">
                     {t('settings.theme')}
@@ -853,14 +933,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           setAutoLogout(!next); // revert on failure
                         }
                       }}
-                      className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-drone-primary focus:ring-offset-2 focus:ring-offset-gray-900 ${
-                        autoLogout ? 'bg-drone-primary' : 'bg-gray-600'
-                      }`}
+                      className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-drone-primary focus:ring-offset-2 focus:ring-offset-gray-900 ${autoLogout ? 'bg-drone-primary' : 'bg-gray-600'
+                        }`}
                     >
                       <span
-                        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transform transition-transform duration-200 ${
-                          autoLogout ? 'translate-x-[18px]' : 'translate-x-[3px]'
-                        }`}
+                        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transform transition-transform duration-200 ${autoLogout ? 'translate-x-[18px]' : 'translate-x-[3px]'
+                          }`}
                       />
                     </button>
                   </div>

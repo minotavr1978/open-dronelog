@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { formatDuration, formatDistance, formatAltitude, formatSpeed, type UnitSystem } from '@/lib/utils';
+import { formatDuration, formatDistance, formatAltitude, formatSpeed, type UnitPreferences } from '@/lib/utils';
 import { isWebMode } from '@/lib/api';
 import type { Flight } from '@/types';
 import { useFlightStore } from '@/stores/flightStore';
@@ -17,7 +17,7 @@ const CARD_WIDTH = 1080;
 
 interface FlyCardGeneratorProps {
   flight: Flight;
-  unitSystem: UnitSystem;
+  unitPrefs: UnitPreferences;
   onClose: () => void;
 }
 
@@ -27,10 +27,10 @@ interface FlyCardGeneratorProps {
 async function captureMapWithOverlayAsync(): Promise<string | null> {
   const captureFunc = (window as any).__captureFlightMapSnapshot;
   if (!captureFunc) return null;
-  
+
   const snapshot = captureFunc();
   if (!snapshot) return null;
-  
+
   return new Promise<string>((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -42,14 +42,14 @@ async function captureMapWithOverlayAsync(): Promise<string | null> {
         resolve(snapshot);
         return;
       }
-      
+
       // Draw the original map
       ctx.drawImage(img, 0, 0);
-      
+
       // Add dark overlay for text readability
       ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
+
       resolve(canvas.toDataURL('image/png'));
     };
     img.onerror = () => resolve(snapshot);
@@ -62,12 +62,12 @@ async function captureMapWithOverlayAsync(): Promise<string | null> {
  */
 async function elementToPng(element: HTMLElement): Promise<Blob> {
   const html2canvas = (await import('html2canvas')).default;
-  
+
   // Get actual element dimensions
   const rect = element.getBoundingClientRect();
   // Calculate scale to get exactly CARD_WIDTH x CARD_HEIGHT output
   const scale = CARD_WIDTH / rect.width;
-  
+
   const canvas = await html2canvas(element, {
     backgroundColor: null,
     scale: scale,
@@ -77,7 +77,7 @@ async function elementToPng(element: HTMLElement): Promise<Blob> {
     useCORS: true,
     allowTaint: true,
   });
-  
+
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) {
@@ -108,14 +108,14 @@ async function saveBlobDesktop(filename: string, blob: Blob): Promise<boolean> {
   try {
     const { save } = await import('@tauri-apps/plugin-dialog');
     const { writeFile } = await import('@tauri-apps/plugin-fs');
-    
+
     const filePath = await save({
       defaultPath: filename,
       filters: [{ name: 'PNG Image', extensions: ['png'] }],
     });
-    
+
     if (!filePath) return false;
-    
+
     const arrayBuffer = await blob.arrayBuffer();
     await writeFile(filePath, new Uint8Array(arrayBuffer));
     return true;
@@ -125,7 +125,7 @@ async function saveBlobDesktop(filename: string, blob: Blob): Promise<boolean> {
   }
 }
 
-export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGeneratorProps) {
+export function FlyCardGenerator({ flight, unitPrefs, onClose }: FlyCardGeneratorProps) {
   const { t } = useTranslation();
   const locale = useFlightStore((state) => state.locale);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -137,16 +137,16 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
   // Capture map background from current FlightMap view on mount
   useEffect(() => {
     let cancelled = false;
-    
+
     async function captureMap() {
       setIsLoading(true);
       try {
         // Wait for map and deck.gl to fully render
         // The flight selection already waited, but give extra time for deck.gl flight path
         await new Promise(resolve => setTimeout(resolve, 300));
-        
+
         if (cancelled) return;
-        
+
         // Capture the current map view
         const mapSnapshot = await captureMapWithOverlayAsync();
         if (!cancelled && mapSnapshot) {
@@ -160,7 +160,7 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
         }
       }
     }
-    
+
     captureMap();
     return () => { cancelled = true; };
   }, [flight.id]);
@@ -185,13 +185,13 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
   // Handle export to PNG
   const handleExport = useCallback(async () => {
     if (!cardRef.current) return;
-    
+
     setIsExporting(true);
     try {
       const blob = await elementToPng(cardRef.current);
       const baseName = (flight.displayName || flight.fileName || 'flight').replace(/[^a-zA-Z0-9_\-]/g, '_');
       const fileName = `FlyCard_${baseName}.png`;
-      
+
       if (isWebMode()) {
         downloadBlobWeb(fileName, blob);
       } else {
@@ -217,10 +217,10 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
 
   // Format stats for display
   const durationValue = formatDuration(flight.durationSecs);
-  const distanceFull = formatDistance(flight.totalDistance, unitSystem, locale);
-  const maxHeightFull = formatAltitude(flight.maxAltitude, unitSystem, locale);
-  const maxSpeedFull = formatSpeed(flight.maxSpeed, unitSystem, locale);
-  
+  const distanceFull = formatDistance(flight.totalDistance, unitPrefs.distance, locale);
+  const maxHeightFull = formatAltitude(flight.maxAltitude, unitPrefs.altitude, locale);
+  const maxSpeedFull = formatSpeed(flight.maxSpeed, unitPrefs.speed, locale);
+
   // Aircraft name from flight data or fallback
   const aircraftName = flight.aircraftName || flight.droneModel || 'Unknown Aircraft';
 
@@ -247,7 +247,7 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
         {/* Background image upload */}
         <div className="mb-4">
           <label className="block text-sm text-gray-400 mb-2">
-            {t('flyCard.customBackground')} 
+            {t('flyCard.customBackground')}
             {backgroundImage && (
               <button
                 type="button"
@@ -301,15 +301,15 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
             >
               {/* Dark overlay for text readability (only if using custom image) */}
               {backgroundImage && (
-                <div 
+                <div
                   className="absolute inset-0"
                   style={{ backgroundColor: 'rgba(0, 0, 0, 0.55)' }}
                 />
               )}
-              
+
               {/* Top Center - Branding */}
-              <div 
-                style={{ 
+              <div
+                style={{
                   position: 'absolute',
                   top: 0,
                   left: 0,
@@ -331,10 +331,10 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
                     position: 'relative',
                   }}
                 >
-                  <img 
+                  <img
                     src={logoIcon}
                     alt="OpenDroneLog"
-                    style={{ 
+                    style={{
                       width: '18px',
                       height: '18px',
                       position: 'absolute',
@@ -343,8 +343,8 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
                     }}
                   />
                 </div>
-                <span 
-                  style={{ 
+                <span
+                  style={{
                     display: 'inline-block',
                     verticalAlign: 'middle',
                     color: 'white',
@@ -358,16 +358,16 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
                   {t('flyCard.generatedWith')}
                 </span>
               </div>
-              
+
               {/* Bottom Left - Flight Stats */}
-              <div 
+              <div
                 className="absolute bottom-0 left-0"
                 style={{ padding: '4%' }}
               >
                 {/* Aircraft Name */}
-                <p 
+                <p
                   className="text-white mb-2"
-                  style={{ 
+                  style={{
                     fontSize: '11px',
                     fontWeight: 400,
                     textShadow: '1px 1px 4px rgba(0,0,0,0.9), 0 0 10px rgba(0,0,0,0.7)',
@@ -382,9 +382,9 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
                 <div className="flex flex-col gap-1">
                   {/* Flight Time */}
                   <div>
-                    <p 
+                    <p
                       className="text-white uppercase tracking-wider"
-                      style={{ 
+                      style={{
                         fontSize: '8px',
                         fontWeight: 600,
                         textShadow: '1px 1px 3px rgba(0,0,0,0.9)',
@@ -394,9 +394,9 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
                     >
                       {t('flyCard.flightTime')}
                     </p>
-                    <p 
+                    <p
                       className="text-white"
-                      style={{ 
+                      style={{
                         fontSize: '22px',
                         fontWeight: 800,
                         textShadow: '2px 2px 6px rgba(0,0,0,0.9), 0 0 15px rgba(0,0,0,0.7)',
@@ -409,9 +409,9 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
 
                   {/* Distance */}
                   <div>
-                    <p 
+                    <p
                       className="text-white uppercase tracking-wider"
-                      style={{ 
+                      style={{
                         fontSize: '8px',
                         fontWeight: 600,
                         textShadow: '1px 1px 3px rgba(0,0,0,0.9)',
@@ -421,9 +421,9 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
                     >
                       {t('flyCard.distance')}
                     </p>
-                    <p 
+                    <p
                       className="text-white"
-                      style={{ 
+                      style={{
                         fontSize: '22px',
                         fontWeight: 800,
                         textShadow: '2px 2px 6px rgba(0,0,0,0.9), 0 0 15px rgba(0,0,0,0.7)',
@@ -436,9 +436,9 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
 
                   {/* Max Height */}
                   <div>
-                    <p 
+                    <p
                       className="text-white uppercase tracking-wider"
-                      style={{ 
+                      style={{
                         fontSize: '8px',
                         fontWeight: 600,
                         textShadow: '1px 1px 3px rgba(0,0,0,0.9)',
@@ -448,9 +448,9 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
                     >
                       {t('flyCard.maxHeight')}
                     </p>
-                    <p 
+                    <p
                       className="text-white"
-                      style={{ 
+                      style={{
                         fontSize: '22px',
                         fontWeight: 800,
                         textShadow: '2px 2px 6px rgba(0,0,0,0.9), 0 0 15px rgba(0,0,0,0.7)',
@@ -463,9 +463,9 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
 
                   {/* Max Speed */}
                   <div>
-                    <p 
+                    <p
                       className="text-white uppercase tracking-wider"
-                      style={{ 
+                      style={{
                         fontSize: '8px',
                         fontWeight: 600,
                         textShadow: '1px 1px 3px rgba(0,0,0,0.9)',
@@ -475,9 +475,9 @@ export function FlyCardGenerator({ flight, unitSystem, onClose }: FlyCardGenerat
                     >
                       {t('flyCard.maxSpeed')}
                     </p>
-                    <p 
+                    <p
                       className="text-white"
-                      style={{ 
+                      style={{
                         fontSize: '22px',
                         fontWeight: 800,
                         textShadow: '2px 2px 6px rgba(0,0,0,0.9), 0 0 15px rgba(0,0,0,0.7)',

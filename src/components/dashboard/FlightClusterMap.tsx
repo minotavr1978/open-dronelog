@@ -10,7 +10,7 @@ import type { MapRef, MapLayerMouseEvent } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type { Flight } from '@/types';
 import { formatDuration, formatDistance, formatAltitude, formatDateTime } from '@/lib/utils';
-import type { UnitSystem } from '@/lib/utils';
+import type { UnitPreferences } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 import { useFlightStore } from '@/stores/flightStore';
 import { Select } from '@/components/ui/Select';
@@ -150,7 +150,7 @@ const heatmapLayer: maplibregl.LayerSpecification = {
 interface FlightClusterMapProps {
   flights: Flight[];
   allFlights?: Flight[];  // All flights for reset zoom
-  unitSystem: UnitSystem;
+  unitPrefs: UnitPreferences;
   themeMode: 'system' | 'dark' | 'light';
   onSelectFlight?: (flightId: number) => void;
   highlightedFlightId?: number | null;  // Flight to highlight on the map
@@ -159,7 +159,7 @@ interface FlightClusterMapProps {
 export function FlightClusterMap({
   flights,
   allFlights,
-  unitSystem,
+  unitPrefs,
   themeMode,
   onSelectFlight,
   highlightedFlightId,
@@ -778,12 +778,12 @@ export function FlightClusterMap({
                     <PopupStatRow
                       icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>}
                       label={t('clusterMap.distance')}
-                      value={formatDistance(popupInfo.flight.totalDistance, unitSystem, locale)}
+                      value={formatDistance(popupInfo.flight.totalDistance, unitPrefs.distance, locale)}
                     />
                     <PopupStatRow
                       icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" /></svg>}
                       label={t('clusterMap.maxAlt')}
-                      value={formatAltitude(popupInfo.flight.maxAltitude, unitSystem, locale)}
+                      value={formatAltitude(popupInfo.flight.maxAltitude, unitPrefs.altitude, locale)}
                     />
                   </div>
 
