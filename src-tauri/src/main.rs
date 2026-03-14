@@ -19,6 +19,7 @@ mod dronelogbook_parser;
 mod litchi_parser;
 mod models;
 mod parser;
+mod plugins;
 mod profile_auth;
 
 #[cfg(all(feature = "web", not(feature = "tauri-app")))]

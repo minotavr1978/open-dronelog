@@ -201,34 +201,73 @@ impl<'a> LogParser<'a> {
         }
 
         // Detect file format and route to appropriate parser
-        // Check for Drone Logbook CSV format first (our own export)
+        let builtin_err;
+
+        // Try built-in CSV parsers first
         if DroneLogbookParser::is_dronelogbook_csv(file_path) {
             log::info!("Detected Drone Logbook CSV format, using DroneLogbookParser");
-            let dronelogbook_parser = DroneLogbookParser::new(self.db);
-            return dronelogbook_parser.parse(file_path, &file_hash);
-        }
-
-        // Check for Airdata CSV format
-        if AirdataParser::is_airdata_csv(file_path) {
+            match DroneLogbookParser::new(self.db).parse(file_path, &file_hash) {
+                Ok(res) => return Ok(res),
+                Err(e) => builtin_err = e,
+            }
+        } else if AirdataParser::is_airdata_csv(file_path) {
             log::info!("Detected Airdata CSV format, using AirdataParser");
-            let airdata_parser = AirdataParser::new(self.db);
-            return airdata_parser.parse(file_path, &file_hash);
-        }
-
-        // Check for Litchi CSV format
-        if LitchiParser::is_litchi_csv(file_path) {
+            match AirdataParser::new(self.db).parse(file_path, &file_hash) {
+                Ok(res) => return Ok(res),
+                Err(e) => builtin_err = e,
+            }
+        } else if LitchiParser::is_litchi_csv(file_path) {
             log::info!("Detected Litchi CSV format, using LitchiParser");
-            let litchi_parser = LitchiParser::new(self.db);
-            return litchi_parser.parse(file_path, &file_hash);
+            match LitchiParser::new(self.db).parse(file_path, &file_hash) {
+                Ok(res) => return Ok(res),
+                Err(e) => builtin_err = e,
+            }
+        } else {
+            let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            if ext.eq_ignore_ascii_case("txt") {
+                // Try DJI log parser
+                match self.parse_dji_txt(file_path, &file_hash, parse_start).await {
+                    Ok(res) => return Ok(res),
+                    Err(e) => builtin_err = e,
+                }
+            } else {
+                builtin_err = ParserError::IncompatibleFile;
+            }
         }
 
-        // Check if this looks like a valid DJI log file
-        let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
-        if !ext.eq_ignore_ascii_case("txt") {
-            log::warn!("Unsupported file extension: .{}", ext);
-            return Err(ParserError::IncompatibleFile);
-        }
+        // Custom Plugin Fallback
+        let err = builtin_err;
+        log::info!("Built-in parser failed or incompatible: {}. Trying custom plugins...", err);
+        if let Some(config) = crate::plugins::get_plugin_config(&self.db.data_dir) {
+            let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+            if let Some(mapping) = config.mappings.get(&ext) {
+                let temp_dir = std::env::temp_dir();
+                let output_csv = temp_dir.join(format!("{}_plugin_out.csv", uuid::Uuid::new_v4()));
+                
+                if let Err(plugin_err) = crate::plugins::run_plugin(mapping, file_path, &output_csv).await {
+                    log::error!("Custom plugin failed: {}", plugin_err);
+                    return Err(err); // Return original built-in error
+                }
 
+                // On success, parse the resulting CSV using DroneLogbookParser
+                let drone_parser = DroneLogbookParser::new(self.db);
+                let result = drone_parser.parse(&output_csv, &file_hash);
+                let _ = fs::remove_file(&output_csv); // Clean up temp file
+                
+                match result {
+                    Ok(res) => return Ok(res),
+                    Err(e) => {
+                        log::error!("Failed to parse custom plugin output CSV: {}", e);
+                        return Err(err); // Return original built-in error
+                    }
+                }
+            }
+        }
+        Err(err)
+    }
+
+    /// Parse a DJI TXT log file
+    async fn parse_dji_txt(&self, file_path: &Path, file_hash: &str, parse_start: std::time::Instant) -> Result<ParseResult, ParserError> {
         // Read the file
         let file_data = fs::read(file_path)?;
 
@@ -343,7 +382,7 @@ impl<'a> LogParser<'a> {
             id: self.db.generate_flight_id(),
             file_name,
             display_name,
-            file_hash: Some(file_hash),
+            file_hash: Some(file_hash.to_string()),
             drone_model: self.extract_drone_model(&parser),
             drone_serial: component_serials.aircraft.clone()
                 .or_else(|| self.extract_serial(&parser)),
@@ -399,6 +438,7 @@ impl<'a> LogParser<'a> {
         log::info!("Generated smart tags: {:?}", tags);
 
         Ok(ParseResult { metadata, points, tags, manual_tags: Vec::new(), notes: None, color: None, messages })
+
     }
 
     /// Generate smart tags based on flight metadata and statistics

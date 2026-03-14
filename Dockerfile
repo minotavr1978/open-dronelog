@@ -1,5 +1,5 @@
 # =============================================================================
-# Drone Logbook — Docker multi-stage build
+# Open Drone Log — Docker multi-stage build
 #
 # Stage 1: Build Rust backend (Axum web server)
 # Stage 2: Build React frontend (Vite)
@@ -73,6 +73,14 @@ RUN npx vite build
 # Stage 3: Runtime
 # ---------------------------------------------------------------------------
 FROM nginx:stable-bookworm AS runtime
+
+# Install Python and Node.js for custom parsers
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy backend binary
 COPY --from=backend-builder /build/src-tauri/target/release/open-dronelog /app/open-dronelog
