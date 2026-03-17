@@ -863,6 +863,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
     };
 
     const batteryAtIndex = mapTelemetrySeriesToPath(telemetry?.battery);
+    const telemetrySpeedAtIndex = mapTelemetrySeriesToPath(telemetry?.speed);
     const rcSignalAtIndex = mapTelemetrySeriesToPath(telemetry?.rcSignal).map((v) => (v === 0 ? null : v));
     const rcSignalNearestAtIndex = [...rcSignalAtIndex];
     let lastRcSignal: number | null = null;
@@ -894,14 +895,27 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
         if (values[i] > maxVal) maxVal = values[i];
       }
     } else if (colorBy === 'speed') {
-      // Approximate speed from consecutive point distance
-      values = [0];
-      for (let i = 1; i < n; i++) {
+      // Speed telemetry is stored in m/s; prefer it for accurate color mapping.
+      // Fall back to distance/time estimation when telemetry speed is unavailable.
+      const fallbackStepSecs = durationSecs && durationSecs > 0 && n > 1
+        ? durationSecs / (n - 1)
+        : null;
+      values = new Array(n).fill(0);
+      for (let i = 0; i < n; i++) {
+        const telemetryMs = telemetrySpeedAtIndex[i];
+        if (telemetryMs !== null) {
+          values[i] = telemetryMs;
+          continue;
+        }
+        if (i === 0 || !fallbackStepSecs || fallbackStepSecs <= 0) {
+          values[i] = 0;
+          continue;
+        }
         const d = haversineM(
           smoothedTrack[i - 1][1], smoothedTrack[i - 1][0],
           smoothedTrack[i][1], smoothedTrack[i][0]
         );
-        values.push(d); // proportional to speed (uniform time steps after smoothing)
+        values[i] = d / fallbackStepSecs;
       }
       minVal = values[0] ?? 0;
       maxVal = values[0] ?? 0;
@@ -949,12 +963,23 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
     };
     const ramp = getRamp();
 
-    // Pre-compute per-point speed and distance for tooltip (always, regardless of colorBy)
-    const speeds: number[] = [0];
-    for (let i = 1; i < n; i++) {
-      speeds.push(
-        haversineM(smoothedTrack[i - 1][1], smoothedTrack[i - 1][0], smoothedTrack[i][1], smoothedTrack[i][0])
-      );
+    // Pre-compute per-point speed (m/s) and distance for tooltip.
+    const fallbackStepSecs = durationSecs && durationSecs > 0 && n > 1
+      ? durationSecs / (n - 1)
+      : null;
+    const speeds: number[] = new Array(n).fill(0);
+    for (let i = 0; i < n; i++) {
+      const telemetryMs = telemetrySpeedAtIndex[i];
+      if (telemetryMs !== null) {
+        speeds[i] = telemetryMs;
+        continue;
+      }
+      if (i === 0 || !fallbackStepSecs || fallbackStepSecs <= 0) {
+        speeds[i] = 0;
+        continue;
+      }
+      const d = haversineM(smoothedTrack[i - 1][1], smoothedTrack[i - 1][0], smoothedTrack[i][1], smoothedTrack[i][0]);
+      speeds[i] = d / fallbackStepSecs;
     }
     const hLat = homeLat ?? smoothedTrack[0]?.[1] ?? 0;
     const hLon = homeLon ?? smoothedTrack[0]?.[0] ?? 0;
@@ -972,8 +997,8 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
     // Using a perceptual threshold (max channel diff ≤ 12) groups segments
     // that look virtually identical, cutting draw calls by 10-40× while
     // preserving the visible gradient.
-    const BATCH_SIZE = 80;
-    const COLOR_THRESHOLD = 12; // max per-channel diff to consider "same color"
+    const BATCH_SIZE = showTooltip ? 1 : 80;
+    const COLOR_THRESHOLD = showTooltip ? -1 : 12; // disable color batching while hovering for fine-grained updates
     let batchPath: [number, number, number][] = [];
     let batchColor: [number, number, number] | null = null;
     let batchMeta: { height: number; speed: number; distance: number; progress: number; lat: number; lng: number; battery: number | null } | null = null;
@@ -1033,7 +1058,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
     flushBatch();
 
     return segments;
-  }, [is3D, smoothedTrack, track, colorBy, homeLat, homeLon, telemetry]);
+  }, [is3D, smoothedTrack, track, colorBy, homeLat, homeLon, telemetry, durationSecs, showTooltip]);
 
   // ── Mobile: GeoJSON for MapLibre native line layer (2D only) ────
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
