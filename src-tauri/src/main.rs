@@ -1732,7 +1732,7 @@ mod tauri_app {
 
 #[cfg(all(feature = "web", not(feature = "tauri-app")))]
 async fn run_web() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug"))
         .init();
 
     let data_dir = std::env::var("DATA_DIR")
