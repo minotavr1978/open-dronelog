@@ -251,16 +251,37 @@ export function FlightClusterMap({
   // Initialize map type from session storage if possible, fallback to 'default'
   const [mapType, setMapType] = useState<MapType>(() => {
     if (typeof window !== 'undefined') {
-      const stored = window.sessionStorage.getItem('clusterMap:mapType');
-      return (stored as MapType) || 'default';
+      const validMapTypes = new Set(MAP_TYPE_OPTIONS.map((option) => option.value));
+      try {
+        const storedLocal = window.localStorage.getItem('clusterMap:mapType');
+        if (storedLocal && validMapTypes.has(storedLocal as MapType)) {
+          return storedLocal as MapType;
+        }
+      } catch {
+        // Ignore localStorage access failures and fall back to session/default.
+      }
+
+      // Migrate existing session value if present.
+      try {
+        const storedSession = window.sessionStorage.getItem('clusterMap:mapType');
+        if (storedSession && validMapTypes.has(storedSession as MapType)) {
+          return storedSession as MapType;
+        }
+      } catch {
+        // Ignore sessionStorage access failures and use default.
+      }
     }
     return 'default';
   });
 
-  // Save to session storage whenever mapType changes
+  // Persist map style across app/browser restarts.
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem('clusterMap:mapType', mapType);
+      try {
+        window.localStorage.setItem('clusterMap:mapType', mapType);
+      } catch {
+        // Ignore persistence failures (map still functions with in-memory state).
+      }
     }
   }, [mapType]);
 

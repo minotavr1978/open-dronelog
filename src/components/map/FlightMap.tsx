@@ -348,8 +348,28 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
   const [is3D, setIs3D] = useState(() => getSessionBool('map:is3d', true));
   const [mapType, setMapType] = useState<MapType>(() => {
     if (typeof window === 'undefined') return 'satellite'; // Change default to satellite for flight path map
-    const stored = window.sessionStorage.getItem('map:mapType');
-    return (stored as MapType) || 'satellite';
+    const validMapTypes = new Set(MAP_TYPE_OPTIONS.map((option) => option.value));
+
+    try {
+      const storedLocal = window.localStorage.getItem('map:mapType');
+      if (storedLocal && validMapTypes.has(storedLocal as MapType)) {
+        return storedLocal as MapType;
+      }
+    } catch {
+      // Ignore localStorage access failures and fall back to session/default.
+    }
+
+    // Migrate existing session value if present.
+    try {
+      const storedSession = window.sessionStorage.getItem('map:mapType');
+      if (storedSession && validMapTypes.has(storedSession as MapType)) {
+        return storedSession as MapType;
+      }
+    } catch {
+      // Ignore sessionStorage access failures and use default.
+    }
+
+    return 'satellite';
   });
   const [colorBy, setColorBy] = useState<ColorByMode>(() => {
     if (typeof window === 'undefined') return 'progress';
@@ -473,7 +493,11 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
   // Save map settings to session storage whenever they change
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem('map:mapType', mapType);
+      try {
+        window.localStorage.setItem('map:mapType', mapType);
+      } catch {
+        // Ignore persistence failures (map still functions with in-memory state).
+      }
       window.sessionStorage.setItem('map:is3d', String(is3D));
       window.sessionStorage.setItem('map:colorBy', colorBy);
       window.sessionStorage.setItem('map:showTooltip', String(showTooltip));
