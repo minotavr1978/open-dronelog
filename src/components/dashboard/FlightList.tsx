@@ -32,8 +32,16 @@ import {
   getPairedBatteryDisplayName,
   useBatteryPairIndex,
 } from '@/lib/batteryPairs';
+import { useIsMobileRuntime } from '@/hooks/platform/useIsMobileRuntime';
 import 'react-day-picker/dist/style.css';
 import JSZip from 'jszip';
+
+function getSafeAreaInsetPx(variableName: string): number {
+  if (typeof window === 'undefined') return 0;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(variableName).trim();
+  const parsed = Number.parseFloat(raw.replace('px', ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 /**
  * Check if element is mostly visible in the viewport
@@ -215,6 +223,7 @@ export function FlightList({
   activeView?: 'flights' | 'overview';
   onFiltersExpanded?: () => void;
 } = {}) {
+  const isMobileRuntime = useIsMobileRuntime();
   const {
     flights,
     selectedFlightId,
@@ -1686,11 +1695,13 @@ export function FlightList({
       setIsExporting(true);
       setExportProgress({ done: 0, total: filteredFlights.length, currentFile: '' });
 
+      const shouldBundleZip = isWebMode() || isMobileRuntime;
+
       const flightsData: { flight: Flight; data: FlightDataResponse }[] = [];
 
-      // In Tauri mode, pick a directory first
+      // In desktop Tauri mode, pick a directory first.
       let dirPath: string | null = null;
-      if (!isWebMode()) {
+      if (!shouldBundleZip) {
         const { open } = await import('@tauri-apps/plugin-dialog');
         dirPath = await open({ directory: true, multiple: false }) as string | null;
         if (!dirPath) {
@@ -1699,8 +1710,8 @@ export function FlightList({
         }
       }
 
-      // For web mode, collect files in a ZIP
-      const zip = isWebMode() ? new JSZip() : null;
+      // For web/mobile, collect files in a ZIP.
+      const zip = shouldBundleZip ? new JSZip() : null;
 
       for (let i = 0; i < filteredFlights.length; i++) {
         const flight = filteredFlights[i];
@@ -1720,10 +1731,10 @@ export function FlightList({
           else if (format === 'gpx') content = buildGpx(data);
           else if (format === 'kml') content = buildKml(data);
 
-          if (isWebMode() && zip) {
+          if (shouldBundleZip && zip) {
             // Add file to ZIP
             zip.file(`${safeName}.${extension}`, content);
-          } else if (!isWebMode()) {
+          } else {
             const { writeTextFile } = await import('@tauri-apps/plugin-fs');
             await writeTextFile(`${dirPath}/${safeName}.${extension}`, content);
           }
@@ -1732,12 +1743,31 @@ export function FlightList({
         }
       }
 
-      // For web mode, generate and download the ZIP file
-      if (isWebMode() && zip) {
+      // For web/mobile, generate ZIP and save/download it.
+      if (shouldBundleZip && zip) {
         setExportProgress({ done: filteredFlights.length, total: filteredFlights.length, currentFile: 'Creating ZIP...' });
         const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
         const timestamp = new Date().toISOString().slice(0, 10);
-        downloadBlob(`drone_flights_${timestamp}_${format}.zip`, zipBlob);
+        const zipName = `drone_flights_${timestamp}_${format}.zip`;
+
+        if (isWebMode()) {
+          downloadBlob(zipName, zipBlob);
+        } else {
+          const { save } = await import('@tauri-apps/plugin-dialog');
+          const { writeFile } = await import('@tauri-apps/plugin-fs');
+          const savePath = await save({
+            defaultPath: zipName,
+            filters: [{ name: 'ZIP', extensions: ['zip'] }],
+          });
+
+          if (!savePath) {
+            setIsExporting(false);
+            return;
+          }
+
+          const bytes = new Uint8Array(await zipBlob.arrayBuffer());
+          await writeFile(savePath, bytes);
+        }
       }
 
       setExportProgress({ done: filteredFlights.length, total: filteredFlights.length, currentFile: '' });
@@ -2017,7 +2047,24 @@ export function FlightList({
   const handleContextMenu = (e: React.MouseEvent, flightId: number) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, flightId });
+
+    const menuWidth = 200;
+    const menuHeight = 290;
+    const safeTop = getSafeAreaInsetPx('--mobile-safe-top');
+    const safeBottom = getSafeAreaInsetPx('--mobile-safe-bottom');
+    const safeLeft = getSafeAreaInsetPx('--mobile-safe-left');
+    const safeRight = getSafeAreaInsetPx('--mobile-safe-right');
+    const topReserve = (isMobileRuntime ? 56 : 8) + safeTop;
+    const bottomReserve = (isMobileRuntime ? 72 : 8) + safeBottom;
+    const leftReserve = 8 + safeLeft;
+    const rightReserve = 8 + safeRight;
+
+    const maxX = Math.max(leftReserve, window.innerWidth - menuWidth - rightReserve);
+    const maxY = Math.max(topReserve, window.innerHeight - menuHeight - bottomReserve);
+    const x = Math.min(Math.max(e.clientX, leftReserve), maxX);
+    const y = Math.min(Math.max(e.clientY, topReserve), maxY);
+
+    setContextMenu({ x, y, flightId });
     setContextExportSubmenuOpen(false);
   };
 
@@ -3462,7 +3509,7 @@ export function FlightList({
                           setIsExportDropdownOpen(false);
                         }
                       }}
-                      className="themed-select-dropdown absolute left-0 top-full mt-2 w-full border border-gray-700 rounded-lg shadow-xl z-50 outline-none"
+                      className={`themed-select-dropdown absolute left-0 ${isMobileRuntime ? 'bottom-full mb-2' : 'top-full mt-2'} w-full border border-gray-700 rounded-lg shadow-xl z-50 outline-none`}
                     >
                       <div className="p-2">
                         {[
@@ -3868,8 +3915,8 @@ export function FlightList({
         <div
           className="fixed z-[9999] min-w-[180px] py-1 rounded-lg border border-gray-700 bg-drone-surface shadow-xl"
           style={{
-            left: Math.min(contextMenu.x, window.innerWidth - 200),
-            top: Math.min(contextMenu.y, window.innerHeight - 290),
+            left: contextMenu.x,
+            top: contextMenu.y,
           }}
           onClick={(e) => e.stopPropagation()}
         >
