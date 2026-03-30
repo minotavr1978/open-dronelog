@@ -3739,7 +3739,7 @@ export function FlightList({
                 onSelectFlight?.(flight.id);
               }
             }}
-            className={`w-full text-left cursor-pointer transition-colors duration-150 flex ${(activeView === 'overview'
+            className={`w-full text-left cursor-pointer transition-colors duration-150 flex select-none ${(activeView === 'overview'
               ? overviewHighlightedFlightId === flight.id
               : (selectedFlightId === flight.id || previewFlightId === flight.id))
               ? 'bg-drone-primary/20'
