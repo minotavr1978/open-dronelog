@@ -700,6 +700,10 @@ body.theme-light .maplibregl-ctrl-group {
   align-items: center;
 }
 
+.maplibregl-ctrl-attrib .maplibregl-ctrl-attrib-inner {
+  gap: 0.25rem;
+}
+
 .maplibregl-ctrl-attrib a {
   color: inherit;
   text-decoration: none;

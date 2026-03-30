@@ -413,6 +413,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
   const { unitPrefs, locale, mapSyncEnabled, setMapReplayProgress } = useFlightStore();
   const mapRef = useRef<MapRef | null>(null);
   const overlayRef = useRef<MapboxOverlay | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
 
   // Capture map snapshot when requested (for FlyCard export)
   // MapboxOverlay with interleaved: false renders deck.gl layers on a
@@ -1558,6 +1559,33 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
     }
   }, [enableTerrain, is3D, resolvedTheme]);
 
+  useEffect(() => {
+    const container = mapContainerRef.current;
+    if (!container) return;
+
+    const resizeMap = () => {
+      const map = mapRef.current?.getMap();
+      if (!map) return;
+      // Run on next frame so layout changes settle before resizing the canvas.
+      requestAnimationFrame(() => {
+        map.resize();
+      });
+    };
+
+    resizeMap();
+
+    const observer = new ResizeObserver(() => {
+      resizeMap();
+    });
+    observer.observe(container);
+
+    window.addEventListener('resize', resizeMap);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', resizeMap);
+    };
+  }, []);
+
   // Check if we have any location data to display
   const hasHomeLocation = homeLat != null && homeLon != null && (Math.abs(homeLat) > 0.000001 || Math.abs(homeLon) > 0.000001);
 
@@ -1571,6 +1599,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
 
   return (
     <div
+      ref={mapContainerRef}
       className="relative h-full w-full min-h-0"
       onMouseMove={(e) => {
         if (!showTooltip || !overlayRef.current || replayActive) {

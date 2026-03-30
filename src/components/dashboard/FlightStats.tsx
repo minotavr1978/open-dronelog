@@ -299,36 +299,36 @@ export function FlightStats({ data }: FlightStatsProps) {
       </div>
 
       {/* Stats Grid */}
-      <div className="flex flex-wrap md:grid md:grid-cols-[repeat(5,minmax(0,1fr))_0.8fr_0.8fr_auto_auto] gap-2">
-        <div className="flex-1 min-w-[120px] md:min-w-0">
+      <div className="flex flex-wrap xl:grid xl:grid-cols-[repeat(5,minmax(0,1fr))_0.8fr_0.8fr_auto_auto] gap-2">
+        <div className="flex-1 min-w-[120px] xl:min-w-0">
           <StatCard
             label={t('flightStats.duration')}
             value={formatDuration(flight.durationSecs)}
             icon={<ClockIcon />}
           />
         </div>
-        <div className="flex-1 min-w-[120px] md:min-w-0">
+        <div className="flex-1 min-w-[120px] xl:min-w-0">
           <StatCard
             label={t('flightStats.distance')}
             value={formatDistance(flight.totalDistance, unitPrefs.distance, locale)}
             icon={<DistanceIcon />}
           />
         </div>
-        <div className="flex-1 min-w-[120px] md:min-w-0">
+        <div className="flex-1 min-w-[120px] xl:min-w-0">
           <StatCard
             label={t('flightStats.maxHeight')}
             value={formatAltitude(flight.maxAltitude, unitPrefs.altitude, locale)}
             icon={<AltitudeIcon />}
           />
         </div>
-        <div className="flex-1 min-w-[120px] md:min-w-0">
+        <div className="flex-1 min-w-[120px] xl:min-w-0">
           <StatCard
             label={t('flightStats.maxSpeed')}
             value={formatSpeed(flight.maxSpeed, unitPrefs.speed, locale)}
             icon={<SpeedIcon />}
           />
         </div>
-        <div className="flex-1 min-w-[120px] md:min-w-0">
+        <div className="flex-1 min-w-[120px] xl:min-w-0">
           <StatCard
             label={t('flightStats.minBattery')}
             value={minBattery !== null ? `${minBattery}%` : '--'}
@@ -336,14 +336,14 @@ export function FlightStats({ data }: FlightStatsProps) {
             alert={minBattery !== null && minBattery < 20}
           />
         </div>
-        <div className="flex-1 min-w-[100px] md:min-w-0">
+        <div className="flex-1 min-w-[100px] xl:min-w-0">
           <StatCard
             label={t('flightStats.photos')}
             value={(flight.photoCount ?? 0).toLocaleString(locale)}
             icon={<CameraIcon />}
           />
         </div>
-        <div className="flex-1 min-w-[100px] md:min-w-0">
+        <div className="flex-1 min-w-[100px] xl:min-w-0">
           <StatCard
             label={t('flightStats.videos')}
             value={(flight.videoCount ?? 0).toLocaleString(locale)}
@@ -351,7 +351,7 @@ export function FlightStats({ data }: FlightStatsProps) {
           />
         </div>
         {/* Weather button */}
-        <div className="flex justify-center md:block">
+        <div className="flex justify-center xl:block">
           <button
             type="button"
             onClick={() => setIsWeatherOpen(true)}
@@ -362,11 +362,11 @@ export function FlightStats({ data }: FlightStatsProps) {
             <WeatherBtnIcon />
           </button>
         </div>
-        <div className="relative flex-1 md:flex-none justify-self-stretch md:justify-self-end">
+        <div className="relative flex-1 xl:flex-none justify-self-stretch xl:justify-self-end">
           <button
             type="button"
             onClick={() => setIsExportOpen((open) => !open)}
-            className="w-full md:w-[126px] h-full min-h-[52px] flex items-center justify-center gap-2 rounded-lg border-2 border-drone-accent/70 text-drone-accent text-sm font-semibold px-2 transition-all duration-200 hover:bg-drone-accent hover:text-white hover:shadow-md"
+            className="w-full xl:w-[126px] h-full min-h-[52px] flex items-center justify-center gap-2 rounded-lg border-2 border-drone-accent/70 text-drone-accent text-sm font-semibold px-2 transition-all duration-200 hover:bg-drone-accent hover:text-white hover:shadow-md"
           >
             <ExportIcon />
             {isExporting ? t('flightStats.exporting') : t('flightStats.export')}

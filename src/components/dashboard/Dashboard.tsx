@@ -61,6 +61,7 @@ export function Dashboard() {
   // Start with null, determine collapsed state after flights are loaded from DB
   const [isImporterCollapsed, setIsImporterCollapsed] = useState<boolean | null>(null);
   const [mainSplit, setMainSplit] = useState(50);
+  const [mainPanelsWidth, setMainPanelsWidth] = useState(0);
   // Track if telemetry panel is collapsed (slider pulled past minimum width)
   const [isTelemetryCollapsed, setIsTelemetryCollapsed] = useState(false);
   const [preCollapseSplit, setPreCollapseSplit] = useState<number | null>(null);
@@ -68,6 +69,10 @@ export function Dashboard() {
   // Width of telemetry panel when collapsed (minimum visible width)
   const TELEMETRY_MIN_VISIBLE_WIDTH = 40;
   const TELEMETRY_MIN_NORMAL_WIDTH = 720;
+  const TELEMETRY_CARD_MIN_WIDTH = 520;
+  const MAP_MIN_WIDTH = 320;
+  const MAP_STACK_TRIGGER_WIDTH = 420;
+  const SIDE_BY_SIDE_MIN_WIDTH = TELEMETRY_MIN_NORMAL_WIDTH + MAP_STACK_TRIGGER_WIDTH + 48;
   const resizingRef = useRef<null | 'sidebar' | 'main'>(null);
 
   // On initial load, collapse importer if there are flights, expand if empty
@@ -106,7 +111,7 @@ export function Dashboard() {
         const rect = container.getBoundingClientRect();
         const percentage = ((event.clientX - rect.left) / rect.width) * 100;
         const minLeftPercent = (TELEMETRY_MIN_VISIBLE_WIDTH / rect.width) * 100;
-        const maxLeftPercent = 100 - (320 / rect.width) * 100;
+        const maxLeftPercent = 100 - (MAP_MIN_WIDTH / rect.width) * 100;
 
         // Calculate the actual pixel width the telemetry panel would be
         const telemetryPixelWidth = (percentage / 100) * rect.width;
@@ -135,6 +140,40 @@ export function Dashboard() {
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, []);
+
+  useEffect(() => {
+    const container = document.getElementById('main-panels');
+    if (!container) {
+      setMainPanelsWidth(0);
+      return;
+    }
+
+    const updateWidth = () => {
+      const host = container.parentElement;
+      const availableWidth = host
+        ? host.getBoundingClientRect().width
+        : container.getBoundingClientRect().width;
+      setMainPanelsWidth(availableWidth);
+    };
+
+    updateWidth();
+
+    const observer = new ResizeObserver(() => {
+      updateWidth();
+    });
+    observer.observe(container);
+
+    window.addEventListener('resize', updateWidth);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateWidth);
+    };
+  }, [activeView, currentFlightData?.flight.id, isSidebarHidden, sidebarWidth]);
+
+  const isDesktopLayout = typeof window !== 'undefined' && window.innerWidth >= 768;
+  const shouldStackPanels = isDesktopLayout && mainPanelsWidth > 0
+    ? mainPanelsWidth < SIDE_BY_SIDE_MIN_WIDTH
+    : !isDesktopLayout;
 
   // Apply theme class on mount and listen for system preference changes.
   // The store's setThemeMode already applies classes synchronously for instant switching;
@@ -584,18 +623,19 @@ export function Dashboard() {
         ) : currentFlightData ? (
           <>
             <div className="w-full h-full overflow-auto">
-              <div className="w-full min-w-0 md:min-w-[700px] lg:min-w-[1100px] min-h-full md:h-full flex flex-col">
+              <div className="w-full min-w-0 md:min-w-[700px] lg:min-w-[1100px] min-h-full md:min-h-[780px] flex flex-col">
                 {/* Stats Bar */}
                 <FlightStats data={currentFlightData} />
 
                 {/* Charts and Map Grid */}
-                <div id="main-panels" className="flex-1 md:min-h-0 flex flex-col md:flex-row gap-4 p-4 overflow-visible md:overflow-hidden">
+                <div id="main-panels" className={`flex-1 md:min-h-[620px] flex flex-col ${shouldStackPanels ? '' : 'md:flex-row'} gap-4 p-4 overflow-visible ${shouldStackPanels ? '' : 'md:overflow-hidden'}`}>
                   {/* Telemetry Charts - when collapsed, content clips instead of squeezing */}
                   <div
-                    className={`card flex flex-col min-h-[400px] md:min-h-0 relative ${isTelemetryCollapsed ? 'overflow-hidden' : 'overflow-hidden'}`}
+                    className={`card flex flex-col min-h-[400px] md:min-h-[520px] md:max-h-[720px] relative ${isTelemetryCollapsed ? 'overflow-hidden' : 'overflow-hidden'}`}
                     style={{
-                      flexBasis: typeof window !== 'undefined' && window.innerWidth >= 768 ? `${mainSplit}%` : 'auto',
-                      minWidth: typeof window !== 'undefined' && window.innerWidth >= 768 ? (isTelemetryCollapsed ? TELEMETRY_MIN_VISIBLE_WIDTH : TELEMETRY_MIN_NORMAL_WIDTH) : '100%',
+                      flexBasis: isDesktopLayout && !shouldStackPanels ? `${mainSplit}%` : 'auto',
+                      flexGrow: isDesktopLayout && !shouldStackPanels ? 0 : 1,
+                      minWidth: isDesktopLayout && !shouldStackPanels ? (isTelemetryCollapsed ? TELEMETRY_MIN_VISIBLE_WIDTH : TELEMETRY_CARD_MIN_WIDTH) : '100%',
                       flexShrink: 0,
                     }}
                   >
@@ -648,12 +688,12 @@ export function Dashboard() {
                       </button>
                     </div>
                     {/* Inner container that maintains minimum width for content */}
-                    <div className="flex-1 overflow-x-auto p-2">
+                    <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto p-2">
                       <div
                         className="min-h-full"
                         style={{
-                          minWidth: typeof window !== 'undefined' && window.innerWidth >= 768 ? TELEMETRY_MIN_NORMAL_WIDTH : '600px',
-                          width: typeof window !== 'undefined' && window.innerWidth >= 768 ? (isTelemetryCollapsed ? TELEMETRY_MIN_NORMAL_WIDTH : '100%') : '100%',
+                          minWidth: isDesktopLayout && !shouldStackPanels ? TELEMETRY_MIN_NORMAL_WIDTH : '600px',
+                          width: isDesktopLayout && !shouldStackPanels ? (isTelemetryCollapsed ? TELEMETRY_MIN_NORMAL_WIDTH : '100%') : '100%',
                         }}
                       >
                         <TelemetryCharts
@@ -669,12 +709,20 @@ export function Dashboard() {
                     onMouseDown={() => {
                       resizingRef.current = 'main';
                     }}
-                    className="hidden md:block w-1 cursor-col-resize bg-gray-700/60 rounded hover:bg-drone-primary/60 transition-colors"
+                    className={`${shouldStackPanels ? 'hidden' : 'block'} w-2 shrink-0 self-stretch cursor-col-resize bg-gray-500/50 rounded hover:bg-drone-primary/80 transition-colors`}
                     title={t('dashboard.dragToResize')}
                   />
 
                   {/* Flight Map */}
-                  <div className="card flex flex-col h-[648px] md:h-auto md:min-h-0 overflow-hidden" style={{ flexBasis: typeof window !== 'undefined' && window.innerWidth >= 768 ? `${100 - mainSplit}%` : 'auto' }}>
+                  <div
+                    className={`card flex flex-col ${isDesktopLayout && !shouldStackPanels ? 'h-[648px] md:h-auto' : 'h-[648px]'} md:min-h-[520px] md:max-h-[720px] overflow-hidden`}
+                    style={{
+                      flexBasis: isDesktopLayout && !shouldStackPanels ? 'auto' : 'auto',
+                      flexGrow: isDesktopLayout && !shouldStackPanels ? 1 : 0,
+                      minWidth: isDesktopLayout && !shouldStackPanels ? MAP_MIN_WIDTH : '100%',
+                      flexShrink: isDesktopLayout && !shouldStackPanels ? 1 : 0,
+                    }}
+                  >
                     <div className="px-3 py-2.5 border-b border-gray-700 flex items-center justify-between">
                       <h2 className="font-semibold text-white">{t('dashboard.flightPath')}</h2>
                       {currentFlightData?.messages && currentFlightData.messages.length > 0 && (
@@ -706,7 +754,7 @@ export function Dashboard() {
                         </button>
                       )}
                     </div>
-                    <div className="flex-1 min-h-0 relative">
+                    <div className="flex-1 min-h-[420px] relative">
                       <FlightMap
                         track={currentFlightData!.track}
                         homeLat={currentFlightData!.flight.homeLat}
