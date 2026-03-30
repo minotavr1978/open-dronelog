@@ -656,7 +656,8 @@
     "yaw": "Guinada",
     "pause": "Pausar",
     "play": "Reproduzir",
-    "clickToCycleSpeed": "Clique para alternar velocidade"
+    "clickToCycleSpeed": "Clique para alternar velocidade",
+    "simplified": "Simplificado"
   },
   "clusterMap": {
     "layers": "Camadas",

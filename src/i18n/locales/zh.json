@@ -663,7 +663,8 @@
     "yaw": "偏航",
     "pause": "暂停",
     "play": "播放",
-    "clickToCycleSpeed": "点击切换速度"
+    "clickToCycleSpeed": "点击切换速度",
+    "simplified": "简化"
   },
   "clusterMap": {
     "layers": "图层",

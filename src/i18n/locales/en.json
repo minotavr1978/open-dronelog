@@ -666,7 +666,8 @@
     "yaw": "Yaw",
     "pause": "Pause",
     "play": "Play",
-    "clickToCycleSpeed": "Click to cycle speed"
+    "clickToCycleSpeed": "Click to cycle speed",
+    "simplified": "Simplified"
   },
   "clusterMap": {
     "layers": "Layers",

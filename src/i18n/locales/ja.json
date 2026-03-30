@@ -663,7 +663,8 @@
     "yaw": "ヨー",
     "pause": "一時停止",
     "play": "再生",
-    "clickToCycleSpeed": "クリックで速度切替"
+    "clickToCycleSpeed": "クリックで速度切替",
+    "simplified": "簡易表示"
   },
   "clusterMap": {
     "layers": "レイヤー",

@@ -663,7 +663,8 @@
     "yaw": "Yaw",
     "pause": "Pauzeren",
     "play": "Afspelen",
-    "clickToCycleSpeed": "Klik om snelheid te wisselen"
+    "clickToCycleSpeed": "Klik om snelheid te wisselen",
+    "simplified": "Vereenvoudigd"
   },
   "clusterMap": {
     "layers": "Lagen",

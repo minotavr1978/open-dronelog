@@ -663,7 +663,8 @@
     "yaw": "요",
     "pause": "일시정지",
     "play": "재생",
-    "clickToCycleSpeed": "클릭하여 속도 변경"
+    "clickToCycleSpeed": "클릭하여 속도 변경",
+    "simplified": "간소화"
   },
   "clusterMap": {
     "layers": "레이어",

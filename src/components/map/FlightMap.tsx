@@ -386,6 +386,13 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
   const [showAircraft, setShowAircraft] = useState(() => getSessionBool('map:showAircraft', true));
   const [showMedia, setShowMedia] = useState(() => getSessionBool('map:showMedia', false));
   const [showMessages, setShowMessages] = useState(() => getSessionBool('map:showMessages', true));
+  const [simplified, setSimplified] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const stored = window.localStorage.getItem('map:simplified');
+    if (stored !== null) return stored === 'true';
+    // Default: ON for mobile/tablet (<1024px), OFF for desktop
+    return window.innerWidth < 1024;
+  });
   const [lineThickness, setLineThickness] = useState(() => {
     if (typeof window === 'undefined') return 3;
     const stored = window.sessionStorage.getItem('map:lineThickness');
@@ -495,6 +502,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
     if (typeof window !== 'undefined') {
       try {
         window.localStorage.setItem('map:mapType', mapType);
+        window.localStorage.setItem('map:simplified', String(simplified));
       } catch {
         // Ignore persistence failures (map still functions with in-memory state).
       }
@@ -515,6 +523,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
     showAircraft,
     showMedia,
     showMessages,
+    simplified,
     lineThickness,
     mapSettingsCollapsed,
   ]);
@@ -809,41 +818,39 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
   // Smooth the raw GPS track
   const smoothedTrack = useMemo(() => {
     if (track.length < 3) return track;
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-    if (isMobile) {
-      // Two passes of moving-average: first pass reduces GPS jitter,
-      // second pass rounds out sharp U-turns that cause joint artifacts.
+    if (simplified) {
+      // Simplified: two passes of moving-average for noise reduction
+      // with minimal vertex count — works well on all devices.
       const pass1 = movingAverageSmooth(track, 5);
       return movingAverageSmooth(pass1, 4);
     }
-    // Desktop/Web: cap raw points before Catmull-Rom to avoid creating
+    // Full mode: cap raw points before Catmull-Rom to avoid creating
     // an excessive number of segments (resolution 4 = 4x multiplier).
     // 3000 raw → ~12000 smoothed points is plenty for visual fidelity.
     const capped = track.length > 3000 ? downsample(track, 3000) : track;
     return smoothTrack(capped, 4);
-  }, [track]);
+  }, [track, simplified]);
 
   const deckPathData = useMemo(() => {
     if (smoothedTrack.length < 2) return [];
 
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
     const toAlt = (altitude: number) => (is3D ? altitude : 0);
     const n = smoothedTrack.length;
     const rawN = track.length;
 
-    // ── Mobile: single multi-point path with solid color ──────────
+    // ── Simplified: single multi-point path with solid color ──────
     // This reduces GPU draw calls from thousands to 1, which is
     // critical for mobile WebGL where per-segment PathLayer data
     // (each with capRounded + jointRounded + billboard tessellation)
     // exceeds vertex buffer / shader limits.
-    if (isMobile) {
+    if (simplified) {
       // When 3D terrain is on, use deck.gl PathLayer for altitude.
-      // When 2D, the MapLibre native line layer handles rendering.
+      // When flat 2D, the MapLibre native line layer handles rendering.
       if (!is3D) return [];
       const full: [number, number, number][] = smoothedTrack.map(([lng, lat, alt]) => [
-        lng, lat, alt,
+        lng, lat, toAlt(alt),
       ]);
-      const path = downsample(full, 500);
+      const path = downsample(full, 2000);
       return [{
         path,
         color: [250, 204, 21] as [number, number, number],
@@ -1082,12 +1089,11 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
     flushBatch();
 
     return segments;
-  }, [is3D, smoothedTrack, track, colorBy, homeLat, homeLon, telemetry, durationSecs, showTooltip]);
+  }, [is3D, smoothedTrack, track, colorBy, homeLat, homeLon, telemetry, durationSecs, showTooltip, simplified]);
 
-  // ── Mobile: GeoJSON for MapLibre native line layer (2D only) ────
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-  const mobilePathGeoJSON = useMemo(() => {
-    if (!isMobile || is3D || smoothedTrack.length < 2) return null;
+  // ── Simplified 2D: GeoJSON for MapLibre native line layer ──────
+  const simplifiedPathGeoJSON = useMemo(() => {
+    if (!simplified || is3D || smoothedTrack.length < 2) return null;
     const coords = downsample(smoothedTrack, 800).map(([lng, lat]) => [lng, lat]);
     return {
       type: 'Feature' as const,
@@ -1097,31 +1103,27 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
       },
       properties: {},
     };
-  }, [isMobile, is3D, smoothedTrack]);
+  }, [simplified, is3D, smoothedTrack]);
 
   const deckLayers = useMemo(() => {
     if (deckPathData.length === 0) return [];
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
     const shadowWidth = lineThickness + 3;
 
-    if (isMobile) {
-      // 3D mode on mobile: deck.gl PathLayer for altitude with minimal settings.
-      // 2D mode uses MapLibre native line instead (returns [] above).
-      if (deckPathData.length === 0) return [];
+    if (simplified) {
+      // Simplified 3D: single PathLayer with consistent uniform thickness.
+      // 2D mode uses MapLibre native line instead (deckPathData returns [] above).
       return [
         new PathLayer({
-          id: 'flight-path-mobile-3d',
+          id: 'flight-path-simplified',
           data: deckPathData,
           getPath: (d) => d.path,
           getColor: [250, 204, 21, 255],
-          getWidth: lineThickness + 1,
+          getWidth: lineThickness,
           widthUnits: 'pixels',
-          widthMinPixels: Math.max(4, lineThickness + 1),
-          widthMaxPixels: 12,
-          capRounded: false,
-          jointRounded: false,
-          miterLimit: 1,
-          billboard: false,
+          widthMinPixels: Math.max(2, lineThickness),
+          capRounded: true,
+          jointRounded: true,
+          billboard: true,
           opacity: 1,
           pickable: false,
           parameters: { depthTest: false },
@@ -1129,7 +1131,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
       ];
     }
 
-    // Desktop: shadow + gradient path
+    // Full mode: shadow + gradient path
     return [
       // Shadow layer slightly thicker than path, purely for visual drop-shadow effect
       new PathLayer({
@@ -1164,7 +1166,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
         parameters: { depthTest: is3D }, // Disable depth-test in 2D so layers aren't clipped by invisible terrain
       }),
     ];
-  }, [deckPathData, showTooltip, lineThickness, is3D, mapType]);
+  }, [deckPathData, showTooltip, lineThickness, is3D, mapType, simplified]);
 
   // ─── Media markers (photo/video locations) with clustering ────────
   interface MediaPoint {
@@ -1662,6 +1664,11 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
                 checked={showMessages}
                 onChange={setShowMessages}
               />
+              <ToggleRow
+                label={t('map.simplified')}
+                checked={simplified}
+                onChange={setSimplified}
+              />
 
               <div className="pt-2 border-t border-gray-600/50 flex items-center justify-between gap-3">
                 <label className="text-xs text-gray-300">Mode</label>
@@ -1677,19 +1684,21 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
                 </div>
               </div>
 
-              {/* Color-by dropdown — hidden on mobile (solid yellow path) */}
-              <div className="pt-2 border-t border-gray-600/50 hidden md:flex items-center justify-between gap-3">
-                <label className="text-xs text-gray-300">Color</label>
-                <div className="w-[110px]">
-                  <Select
-                    value={colorBy}
-                    onChange={(v) => setColorBy(v as ColorByMode)}
-                    className="text-xs"
-                    listMaxHeight="h-40"
-                    options={COLOR_BY_OPTIONS.map((opt) => ({ value: opt.value, label: t(opt.labelKey) }))}
-                  />
+              {/* Color-by dropdown — hidden when simplified mode is on (single-color path) */}
+              {!simplified && (
+                <div className="pt-2 border-t border-gray-600/50 flex items-center justify-between gap-3">
+                  <label className="text-xs text-gray-300">Color</label>
+                  <div className="w-[110px]">
+                    <Select
+                      value={colorBy}
+                      onChange={(v) => setColorBy(v as ColorByMode)}
+                      className="text-xs"
+                      listMaxHeight="h-40"
+                      options={COLOR_BY_OPTIONS.map((opt) => ({ value: opt.value, label: t(opt.labelKey) }))}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Line thickness dropdown */}
               <div className="pt-2 border-t border-gray-600/50 flex items-center justify-between gap-3">
@@ -1782,11 +1791,11 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
         </div>
 
 
-        {/* Mobile 2D: MapLibre native line layer — uniform width, reliable on all GPUs */}
-        {isMobile && !is3D && mobilePathGeoJSON && (
-          <Source id="mobile-flight-path" type="geojson" data={mobilePathGeoJSON}>
+        {/* Simplified 2D: MapLibre native line layer — uniform width, reliable on all GPUs */}
+        {simplified && !is3D && simplifiedPathGeoJSON && (
+          <Source id="simplified-flight-path" type="geojson" data={simplifiedPathGeoJSON}>
             <Layer
-              id="mobile-flight-path-line"
+              id="simplified-flight-path-line"
               type="line"
               paint={{
                 'line-color': '#facc15',

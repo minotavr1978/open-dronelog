@@ -661,7 +661,8 @@
     "yaw": "Odchylenie",
     "pause": "Pauza",
     "play": "Odtwarzaj",
-    "clickToCycleSpeed": "Kliknij, aby zmienić prędkość"
+    "clickToCycleSpeed": "Kliknij, aby zmienić prędkość",
+    "simplified": "Uproszczony"
   },
   "clusterMap": {
     "layers": "Warstwy",

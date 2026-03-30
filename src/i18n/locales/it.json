@@ -663,7 +663,8 @@
     "yaw": "Imbardata",
     "pause": "Pausa",
     "play": "Riproduci",
-    "clickToCycleSpeed": "Clicca per cambiare velocità"
+    "clickToCycleSpeed": "Clicca per cambiare velocità",
+    "simplified": "Semplificato"
   },
   "clusterMap": {
     "layers": "Livelli",

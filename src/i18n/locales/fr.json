@@ -663,7 +663,8 @@
     "yaw": "Lacet",
     "pause": "Pause",
     "play": "Lecture",
-    "clickToCycleSpeed": "Cliquez pour changer la vitesse"
+    "clickToCycleSpeed": "Cliquez pour changer la vitesse",
+    "simplified": "Simplifié"
   },
   "clusterMap": {
     "layers": "Calques",

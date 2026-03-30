@@ -666,7 +666,8 @@
     "yaw": "Lengés",
     "pause": "Szünet",
     "play": "Lejátszás",
-    "clickToCycleSpeed": "Kattintson a sebesség módosításához"
+    "clickToCycleSpeed": "Kattintson a sebesség módosításához",
+    "simplified": "Egyszerűsített"
   },
   "clusterMap": {
     "layers": "Rétegek",
