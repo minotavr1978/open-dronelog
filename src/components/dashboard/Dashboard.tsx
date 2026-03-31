@@ -255,12 +255,24 @@ export function Dashboard() {
       <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
 
       {/* Left Sidebar - Flight List */}
-      {!isSidebarHidden && (
-        <aside
-          className="bg-drone-secondary md:border-r border-gray-700 flex flex-col z-50 fixed inset-0 md:relative md:inset-auto mobile-safe-container h-full overflow-y-auto overflow-x-hidden"
-          style={{ width: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : sidebarWidth, minWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : 340 }}
-        >
-          <div className="flex h-full flex-col" style={{ minHeight: sidebarMinHeight }}>
+      <aside
+        className={`bg-drone-secondary md:border-r border-gray-700 flex flex-col z-50 fixed inset-0 md:relative md:inset-auto mobile-safe-container h-full overflow-y-auto overflow-x-hidden transition-[width,min-width,opacity,transform] duration-300 ease-in-out ${isSidebarHidden ? 'opacity-0 pointer-events-none md:overflow-hidden' : 'opacity-100'
+          }`}
+        style={{
+          width: typeof window !== 'undefined' && window.innerWidth < 768
+            ? '100%'
+            : (isSidebarHidden ? 0 : sidebarWidth),
+          minWidth: typeof window !== 'undefined' && window.innerWidth < 768
+            ? '100%'
+            : (isSidebarHidden ? 0 : 340),
+          transform: isSidebarHidden
+            ? (typeof window !== 'undefined' && window.innerWidth < 768
+              ? 'translateX(-100%)'
+              : `translateX(-${sidebarWidth}px)`)
+            : 'translateX(0)',
+        }}
+      >
+          <div className={`flex h-full flex-col md:transition-opacity md:duration-150 ${isSidebarHidden ? 'md:opacity-0' : 'md:opacity-100'}`} style={{ minHeight: sidebarMinHeight }}>
           <div className="p-4 border-b border-gray-700 flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-white flex items-center gap-2">
@@ -578,19 +590,20 @@ export function Dashboard() {
           />
           </div>
         </aside>
-      )}
 
-      {isSidebarHidden && (
-        <aside className="w-[1.8rem] bg-drone-secondary border-r border-gray-700 flex items-start justify-center relative hidden md:flex">
-          <button
-            onClick={() => setIsSidebarHidden(false)}
-            className="sidebar-collapsed-toggle-btn mt-4 translate-x-1/2 border rounded-full w-[4rem] h-[3rem] text-lg leading-none flex items-center justify-center"
-            title={t('dashboard.showSidebar')}
-          >
-            ›
-          </button>
-        </aside>
-      )}
+      <aside
+        className={`bg-drone-secondary border-r border-gray-700 items-start justify-center relative hidden md:flex md:transition-[width,min-width,opacity] md:duration-250 md:ease-in-out ${isSidebarHidden ? 'md:opacity-100 md:pointer-events-auto' : 'md:opacity-0 md:pointer-events-none'
+          }`}
+        style={{ width: isSidebarHidden ? '1.8rem' : 0, minWidth: isSidebarHidden ? '1.8rem' : 0 }}
+      >
+        <button
+          onClick={() => setIsSidebarHidden(false)}
+          className="sidebar-collapsed-toggle-btn mt-4 translate-x-1/2 border rounded-full w-[4rem] h-[3rem] text-lg leading-none flex items-center justify-center"
+          title={t('dashboard.showSidebar')}
+        >
+          ›
+        </button>
+      </aside>
 
       {/* Mobile Show Sidebar Button */}
       {isSidebarHidden && (
