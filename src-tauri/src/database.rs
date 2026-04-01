@@ -2829,13 +2829,43 @@ impl Database {
             DELETE FROM flights
             WHERE id IN (SELECT id FROM read_parquet('{}'))
                OR file_hash IN (SELECT file_hash FROM read_parquet('{}') WHERE file_hash IS NOT NULL);
-            INSERT INTO flights
-            SELECT * FROM read_parquet('{}');
             "#,
             flights_path.to_string_lossy(),
             flights_path.to_string_lossy(),
-            flights_path.to_string_lossy()
         ))?;
+
+        // Use BY NAME so backups remain compatible across schema changes and column-order drift.
+        let restore_flights_sql = format!(
+            r#"
+            INSERT INTO flights BY NAME
+            SELECT * FROM read_parquet('{}');
+            "#,
+            flights_path.to_string_lossy()
+        );
+
+        match conn.execute_batch(&restore_flights_sql) {
+            Ok(()) => {}
+            Err(err) => {
+                let err_msg = err.to_string();
+                // Backward-compat: older backups may lack display_name.
+                if err_msg.contains("display_name") {
+                    log::warn!(
+                        "Backup flights.parquet is missing display_name ({}). Retrying with display_name synthesized from file_name.",
+                        err_msg
+                    );
+                    conn.execute_batch(&format!(
+                        r#"
+                        INSERT INTO flights BY NAME
+                        SELECT * REPLACE (COALESCE(display_name, file_name) AS display_name)
+                        FROM read_parquet('{}');
+                        "#,
+                        flights_path.to_string_lossy()
+                    ))?;
+                } else {
+                    return Err(DatabaseError::DuckDb(err));
+                }
+            }
+        }
 
         let flights_restored: i64 = conn.query_row(
             &format!("SELECT COUNT(*) FROM read_parquet('{}')", flights_path.to_string_lossy()),
@@ -2853,7 +2883,7 @@ impl Database {
                 WHERE flight_id IN (
                     SELECT DISTINCT flight_id FROM read_parquet('{}')
                 );
-                INSERT INTO telemetry
+                INSERT INTO telemetry BY NAME
                 SELECT * FROM read_parquet('{}');
                 "#,
                 telemetry_path.to_string_lossy(),
@@ -2865,7 +2895,7 @@ impl Database {
         if keychains_path.exists() {
             conn.execute_batch(&format!(
                 r#"
-                INSERT OR REPLACE INTO keychains
+                INSERT OR REPLACE INTO keychains BY NAME
                 SELECT * FROM read_parquet('{}');
                 "#,
                 keychains_path.to_string_lossy()
@@ -2881,7 +2911,7 @@ impl Database {
                 WHERE flight_id IN (
                     SELECT DISTINCT flight_id FROM read_parquet('{}')
                 );
-                INSERT INTO flight_tags
+                INSERT INTO flight_tags BY NAME
                 SELECT * FROM read_parquet('{}');
                 "#,
                 tags_path.to_string_lossy(),
@@ -2898,7 +2928,7 @@ impl Database {
                 WHERE flight_id IN (
                     SELECT DISTINCT flight_id FROM read_parquet('{}')
                 );
-                INSERT INTO flight_messages
+                INSERT INTO flight_messages BY NAME
                 SELECT * FROM read_parquet('{}');
                 "#,
                 messages_path.to_string_lossy(),
@@ -2911,7 +2941,7 @@ impl Database {
         if equipment_names_path.exists() {
             let _ = conn.execute_batch(&format!(
                 r#"
-                INSERT OR REPLACE INTO equipment_names
+                INSERT OR REPLACE INTO equipment_names BY NAME
                 SELECT * FROM read_parquet('{}');
                 "#,
                 equipment_names_path.to_string_lossy()
@@ -2923,7 +2953,7 @@ impl Database {
         if customizations_path.exists() {
             let _ = conn.execute_batch(&format!(
                 r#"
-                INSERT OR REPLACE INTO flight_customizations
+                INSERT OR REPLACE INTO flight_customizations BY NAME
                 SELECT * FROM read_parquet('{}');
                 "#,
                 customizations_path.to_string_lossy()
@@ -2935,7 +2965,7 @@ impl Database {
         if settings_path.exists() {
             let _ = conn.execute_batch(&format!(
                 r#"
-                INSERT OR REPLACE INTO settings
+                INSERT OR REPLACE INTO settings BY NAME
                 SELECT * FROM read_parquet('{}');
                 "#,
                 settings_path.to_string_lossy()
