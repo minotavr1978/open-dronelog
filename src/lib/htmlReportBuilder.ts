@@ -475,17 +475,31 @@ function buildFlightColumns(
   if (fc.takeoffBattery) {
     const b = fd.data.telemetry.battery;
     const v = fd.data.telemetry.batteryVoltage;
-    const firstBat = b?.find((val) => val !== null);
-    // Find first voltage at same index as first valid battery
+    // Use the highest valid battery percentage for takeoff; many logs begin with 0 placeholders.
+    const indexedBattery = (b ?? [])
+      .map((pct, idx) => ({ pct, idx }))
+      .filter((sample): sample is { pct: number; idx: number } => typeof sample.pct === 'number' && Number.isFinite(sample.pct));
+
+    const nonZeroBattery = indexedBattery.filter((sample) => sample.pct > 0);
+
+    let takeoffSample: { pct: number; idx: number } | null = null;
+    for (const sample of nonZeroBattery) {
+      if (!takeoffSample || sample.pct > takeoffSample.pct) {
+        takeoffSample = sample;
+      }
+    }
+
+    const firstBat = takeoffSample?.pct ?? null;
+    // Find voltage at the same index as selected takeoff battery sample.
     let firstVolt: number | null = null;
-    if (fc.batteryVoltage && b && v) {
-      const firstBatIdx = b.findIndex((val) => val !== null);
-      if (firstBatIdx >= 0 && firstBatIdx < v.length) {
-        firstVolt = v[firstBatIdx];
+    if (fc.batteryVoltage && v && takeoffSample && takeoffSample.idx < v.length) {
+      const sampleVolt = v[takeoffSample.idx];
+      if (typeof sampleVolt === 'number' && Number.isFinite(sampleVolt)) {
+        firstVolt = sampleVolt;
       }
     }
     let takeoffValue = '—';
-    if (firstBat != null && firstBat !== 0) {
+    if (firstBat != null) {
       takeoffValue = firstVolt != null && firstVolt > 0
         ? `${firstBat}% (${firstVolt.toFixed(2)} V)`
         : `${firstBat}%`;
