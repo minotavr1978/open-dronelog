@@ -1024,21 +1024,26 @@ function ActivityHeatmap({
       weeks.push(week);
     }
 
-    // Show most recent weeks at the left edge.
-    const displayedWeeks = [...weeks].reverse();
+    // Keep natural chronology: older weeks on the left, newer on the right.
+    const displayedWeeks = weeks;
 
-    // Extract month labels aligned to week columns in displayed order.
+    // Extract month labels and skip labels that would collide visually.
     const months: { label: string; col: number }[] = [];
     let lastMonth = -1;
+    let lastShownCol = -999;
+    const minLabelGapCols = 3;
     displayedWeeks.forEach((week, weekIdx) => {
       const firstValidDay = week.find((d) => d.count >= 0);
       if (firstValidDay) {
         const month = firstValidDay.date.getMonth();
         if (month !== lastMonth) {
-          months.push({
-            label: firstValidDay.date.toLocaleDateString(appLanguage || 'en', { month: 'short' }),
-            col: weekIdx,
-          });
+          if (weekIdx - lastShownCol >= minLabelGapCols) {
+            months.push({
+              label: firstValidDay.date.toLocaleDateString(appLanguage || 'en', { month: 'short' }),
+              col: weekIdx,
+            });
+            lastShownCol = weekIdx;
+          }
           lastMonth = month;
         }
       }
