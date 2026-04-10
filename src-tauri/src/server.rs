@@ -286,6 +286,8 @@ async fn import_log(
     let temp_path = temp_dir.join(&file_name);
     std::fs::write(&temp_path, &data)
         .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write temp file: {}", e)))?;
+    // Release multipart payload bytes before parse/import work starts.
+    drop(data);
 
     let import_start = std::time::Instant::now();
     log::info!("Importing uploaded log file: {}", file_name);

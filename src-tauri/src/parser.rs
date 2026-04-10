@@ -338,7 +338,7 @@ impl<'a> LogParser<'a> {
         // Parse with dji-log-parser inside spawn_blocking + catch_unwind
         // This prevents a panicking/hanging parser from killing the app
         let parser = {
-            let data = file_data.clone();
+            let data = file_data;
             let result = timeout(
                 Duration::from_secs(PARSE_TIMEOUT_SECS),
                 tokio::task::spawn_blocking(move || {

@@ -650,9 +650,11 @@ export function FlightImporter() {
           if (isManualImport && result.fileHash) {
             await removeFromBlacklist(result.fileHash);
           }
-          // Refresh flight list in background while cooldown runs
-          // This way user sees new flights appear during the wait
-          refreshFlightListBackground();
+          // Refresh flight list periodically during batch processing.
+          // Keep cadence consistent across runtimes.
+          if (processed % REFRESH_INTERVAL === 0) {
+            refreshFlightListBackground();
+          }
           
           // Only apply cooldown between successful imports (not on last)
           if (!isLast) {
@@ -966,6 +968,7 @@ export function FlightImporter() {
         });
 
         await processBatchRef.current([...mobileSyncFilesRef.current], false);
+        mobileSyncFilesRef.current = [];
       };
 
       const timeoutId = window.setTimeout(() => {
@@ -1282,6 +1285,7 @@ export function FlightImporter() {
       }
 
       await processBatch([...mobileSyncFilesRef.current], false);
+      mobileSyncFilesRef.current = [];
       return;
     }
 

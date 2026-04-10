@@ -441,6 +441,8 @@
 
         std::fs::write(&temp_path, &file_bytes)
             .map_err(|e| format!("Failed to stage imported file: {}", e))?;
+        // Release uploaded bytes before parse/import work starts.
+        drop(file_bytes);
 
         let result = import_log(temp_path.to_string_lossy().to_string(), state).await;
 
