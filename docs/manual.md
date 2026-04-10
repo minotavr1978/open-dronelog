@@ -561,7 +561,7 @@ The telemetry panel displays synchronized charts:
 | **Distance to Home** | How far from takeoff point |
 | **Velocity X/Y/Z** | Speed components in 3D space |
 | **Battery Full Capacity** | Design capacity reported by the battery (mAh) |
-| **Battery Remained Capacity** | Remaining usable capacity (mAh) |
+| **Battery Remaining Capacity** | Remaining usable capacity (mAh) |
 
 > [!NOTE]
 > The Cell Voltages chart is only displayed when cell voltage data is available from the flight log. Not all DJI drones record per-cell voltages.

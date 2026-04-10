@@ -720,7 +720,7 @@
     "gpsSatellites": "GPS Satellites",
     "distToHome": "Distance to Home",
     "fullCapacity": "Full Capacity",
-    "remainedCapacity": "Remained Capacity",
+    "remainedCapacity": "Remaining Capacity",
     "cellVoltages": "Cell Voltages",
     "cell": "Cell {{n}}",
     "selectData": "Select data to plot (max 4)",
