@@ -1,5 +1,5 @@
 {
-  "sourceFingerprint": "0d83ea15607a05b1b4122162e2eb6228f33e95a69f82d0702047c4048b1c2cac",
+  "sourceFingerprint": "ff7717bd40ba6c239d7b5f3168e1b9bb4326fb721a2936c55b9b9a068c8f08e1",
   "packageName": "open-dronelog",
   "projectVersion": "3.1.2",
   "dependencies": [
@@ -16,7 +16,6 @@
     "html2canvas",
     "i18next",
     "js-sha256",
-    "jszip",
     "maplibre-gl",
     "react",
     "react-day-picker",

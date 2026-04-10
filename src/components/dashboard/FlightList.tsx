@@ -35,7 +35,6 @@ import {
 } from '@/lib/batteryPairs';
 import { useIsMobileRuntime } from '@/hooks/platform/useIsMobileRuntime';
 import 'react-day-picker/dist/style.css';
-import JSZip from 'jszip';
 
 function getSafeAreaInsetPx(variableName: string): number {
   if (typeof window === 'undefined') return 0;
@@ -1737,21 +1736,146 @@ export function FlightList({
       setIsExporting(true);
       setExportProgress({ done: 0, total: filteredFlights.length, currentFile: '' });
 
-      const shouldBundleZip = isWebMode() || isMobileRuntime;
+      if (isWebMode()) {
+        const webWindow = window as Window & {
+          showDirectoryPicker?: (options?: unknown) => Promise<{
+            getFileHandle: (name: string, opts?: { create?: boolean }) => Promise<{
+              createWritable: () => Promise<{ write: (data: string) => Promise<void>; close: () => Promise<void> }>;
+            }>;
+          }>;
+        };
+
+        let selectedDirHandle: {
+          getFileHandle: (name: string, opts?: { create?: boolean }) => Promise<{
+            createWritable: () => Promise<{ write: (data: string) => Promise<void>; close: () => Promise<void> }>;
+          }>;
+        } | null = null;
+
+        let useBrowserDownloads = false;
+        const confirmDownloadFallback = (): boolean => window.confirm(
+          'Directory write access is unavailable. The app can download multiple individual files to your browser\'s default download location.\n\nPress OK to continue with multiple downloads, or Cancel to stop export.'
+        );
+
+        if (typeof webWindow.showDirectoryPicker === 'function') {
+          try {
+            selectedDirHandle = await webWindow.showDirectoryPicker({ mode: 'readwrite' });
+          } catch (err) {
+            const name = (err as { name?: string } | null)?.name;
+            if (name === 'AbortError') {
+              setIsExporting(false);
+              return;
+            }
+            if (!confirmDownloadFallback()) {
+              setIsExporting(false);
+              return;
+            }
+            useBrowserDownloads = true;
+          }
+        } else {
+          if (!confirmDownloadFallback()) {
+            setIsExporting(false);
+            return;
+          }
+          useBrowserDownloads = true;
+        }
+
+        for (let i = 0; i < filteredFlights.length; i++) {
+          const flight = filteredFlights[i];
+          const baseName = flight.displayName || flight.fileName || 'flight';
+          const safeName = sanitizeFileName(`${baseName}_${flight.id}`);
+          const targetName = `${safeName}.${extension}`;
+          setExportProgress({ done: i, total: filteredFlights.length, currentFile: safeName });
+
+          try {
+            const data: FlightDataResponse = await api.getFlightData(flight.id, 999999999);
+
+            let content = '';
+            if (format === 'csv') content = buildCsv(data, unitPrefs);
+            else if (format === 'json') content = buildJson(data, unitPrefs);
+            else if (format === 'gpx') content = buildGpx(data);
+            else if (format === 'kml') content = buildKml(data);
+
+            if (!useBrowserDownloads && selectedDirHandle) {
+              try {
+                const fileHandle = await selectedDirHandle.getFileHandle(targetName, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(content);
+                await writable.close();
+              } catch (err) {
+                console.warn(`Directory write failed for ${targetName}:`, err);
+                if (!confirmDownloadFallback()) {
+                  setIsExporting(false);
+                  return;
+                }
+                useBrowserDownloads = true;
+                downloadFile(targetName, content);
+              }
+            } else {
+              downloadFile(targetName, content);
+            }
+          } catch (err) {
+            console.error(`Failed to export flight ${flight.id}:`, err);
+          }
+        }
+
+        setExportProgress({ done: filteredFlights.length, total: filteredFlights.length, currentFile: '' });
+        setTimeout(() => setIsExporting(false), 1000);
+        return;
+      }
 
       // In desktop Tauri mode, pick a directory first.
       let dirPath: string | null = null;
-      if (!shouldBundleZip) {
-        const { open } = await import('@tauri-apps/plugin-dialog');
-        dirPath = await open({ directory: true, multiple: false }) as string | null;
-        if (!dirPath) {
+      if (isMobileRuntime) {
+        const androidFs = await import('tauri-plugin-android-fs-api');
+        const dirUri = await androidFs.AndroidFs.showOpenDirPicker();
+        if (!dirUri) {
           setIsExporting(false);
           return;
         }
+        await androidFs.AndroidFs.persistPickerUriPermission(dirUri).catch((err) => {
+          console.warn('Failed to persist Android folder permission:', err);
+        });
+
+        const mimeTypeByExt = (ext: string): string => {
+          if (ext === 'csv') return 'text/csv';
+          if (ext === 'json') return 'application/json';
+          if (ext === 'gpx') return 'application/gpx+xml';
+          if (ext === 'kml') return 'application/vnd.google-earth.kml+xml';
+          return 'text/plain';
+        };
+
+        for (let i = 0; i < filteredFlights.length; i++) {
+          const flight = filteredFlights[i];
+          const baseName = flight.displayName || flight.fileName || 'flight';
+          const safeName = sanitizeFileName(`${baseName}_${flight.id}`);
+          setExportProgress({ done: i, total: filteredFlights.length, currentFile: safeName });
+
+          try {
+            const data: FlightDataResponse = await api.getFlightData(flight.id, 999999999);
+            let content = '';
+            if (format === 'csv') content = buildCsv(data, unitPrefs);
+            else if (format === 'json') content = buildJson(data, unitPrefs);
+            else if (format === 'gpx') content = buildGpx(data);
+            else if (format === 'kml') content = buildKml(data);
+
+            const fileUri = await androidFs.AndroidFs.createNewFile(dirUri, `${safeName}.${extension}`, mimeTypeByExt(extension));
+            await androidFs.AndroidFs.writeTextFile(fileUri, content);
+          } catch (err) {
+            console.error(`Failed to export flight ${flight.id}:`, err);
+          }
+        }
+
+        setExportProgress({ done: filteredFlights.length, total: filteredFlights.length, currentFile: '' });
+        setTimeout(() => setIsExporting(false), 1000);
+        return;
       }
 
-      // For web/mobile, collect files in a ZIP.
-      const zip = shouldBundleZip ? new JSZip() : null;
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      dirPath = await open({ directory: true, multiple: false }) as string | null;
+      if (!dirPath) {
+        setIsExporting(false);
+        return;
+      }
 
       for (let i = 0; i < filteredFlights.length; i++) {
         const flight = filteredFlights[i];
@@ -1768,76 +1892,10 @@ export function FlightList({
           else if (format === 'gpx') content = buildGpx(data);
           else if (format === 'kml') content = buildKml(data);
 
-          if (shouldBundleZip && zip) {
-            // Add file to ZIP
-            zip.file(`${safeName}.${extension}`, content);
-          } else {
-            const { writeTextFile } = await import('@tauri-apps/plugin-fs');
-            await writeTextFile(`${dirPath}/${safeName}.${extension}`, content);
-          }
+          const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+          await writeTextFile(`${dirPath}/${safeName}.${extension}`, content);
         } catch (err) {
           console.error(`Failed to export flight ${flight.id}:`, err);
-        }
-      }
-
-      // For web/mobile, generate ZIP and save/download it.
-      if (shouldBundleZip && zip) {
-        setExportProgress({ done: filteredFlights.length, total: filteredFlights.length, currentFile: 'Creating ZIP...' });
-        const zipBlob = await zip.generateAsync({
-          type: 'blob',
-          streamFiles: true,
-          compression: 'DEFLATE',
-          compressionOptions: { level: 6 },
-        });
-        const now = new Date();
-        const pad2 = (n: number) => String(n).padStart(2, '0');
-        const timestamp = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}_${pad2(now.getHours())}-${pad2(now.getMinutes())}-${pad2(now.getSeconds())}`;
-        const zipName = `drone_flights_${format}_${timestamp}.zip`;
-
-        if (isWebMode()) {
-          const webWindow = window as Window & {
-            showSaveFilePicker?: (options?: unknown) => Promise<{ createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }> }>;
-          };
-
-          if (typeof webWindow.showSaveFilePicker === 'function') {
-            try {
-              const fileHandle = await webWindow.showSaveFilePicker({
-                suggestedName: zipName,
-                types: [{
-                  description: 'ZIP',
-                  accept: { 'application/zip': ['.zip'] },
-                }],
-              });
-              const writable = await fileHandle.createWritable();
-              await writable.write(zipBlob);
-              await writable.close();
-            } catch (err) {
-              const name = (err as { name?: string } | null)?.name;
-              if (name === 'AbortError') {
-                setIsExporting(false);
-                return;
-              }
-              throw err;
-            }
-          } else {
-            // Fallback for browsers without save picker support.
-            downloadBlob(zipName, zipBlob);
-          }
-        } else {
-          const { save } = await import('@tauri-apps/plugin-dialog');
-          const { writeFile } = await import('@tauri-apps/plugin-fs');
-          const savePath = await save({
-            defaultPath: zipName,
-            filters: [{ name: 'ZIP', extensions: ['zip'] }],
-          });
-
-          if (!savePath) {
-            setIsExporting(false);
-            return;
-          }
-
-          const bytes = new Uint8Array(await zipBlob.arrayBuffer());
-          await writeFile(savePath, bytes);
         }
       }
 
