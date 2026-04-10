@@ -1589,6 +1589,13 @@ export function FlightList({
     return sortOptions.find((option) => option.value === sortOption)?.label ?? 'Sort';
   }, [sortOption, sortOptions]);
 
+  const htmlReportExportLimit = 250;
+  const isHtmlReportExportDisabled = filteredFlights.length > htmlReportExportLimit;
+  const htmlReportDisabledTooltip = t(
+    'flightList.htmlReportLimitTooltip',
+    `HTML report export is limited to ${htmlReportExportLimit} logs`,
+  );
+
   const sanitizeFileName = (name: string): string => {
     return name.replace(/[^a-zA-Z0-9_\-\.]/g, '_').replace(/_{2,}/g, '_');
   };
@@ -3599,7 +3606,13 @@ export function FlightList({
                           { id: 'gpx', label: t('flightList.gpx'), ext: 'gpx', disabled: false },
                           { id: 'kml', label: t('flightList.kml'), ext: 'kml', disabled: false },
                           { id: 'summary', label: t('flightList.summaryCSV'), ext: 'csv', disabled: filteredFlights.length <= 1 },
-                          { id: 'html_report', label: t('flightList.htmlReport'), ext: 'html', disabled: false },
+                          {
+                            id: 'html_report',
+                            label: t('flightList.htmlReport'),
+                            ext: 'html',
+                            disabled: isHtmlReportExportDisabled,
+                            tooltip: isHtmlReportExportDisabled ? htmlReportDisabledTooltip : undefined,
+                          },
                         ];
                         const enabledOptions = exportOptions.filter(o => !o.disabled);
                         if (e.key === 'ArrowDown') {
@@ -3650,7 +3663,13 @@ export function FlightList({
                           { id: 'gpx', label: t('flightList.gpx'), ext: 'gpx', disabled: false },
                           { id: 'kml', label: t('flightList.kml'), ext: 'kml', disabled: false },
                           { id: 'summary', label: t('flightList.summaryCSV'), ext: 'csv', disabled: filteredFlights.length <= 1 },
-                          { id: 'html_report', label: t('flightList.htmlReport'), ext: 'html', disabled: false },
+                          {
+                            id: 'html_report',
+                            label: t('flightList.htmlReport'),
+                            ext: 'html',
+                            disabled: isHtmlReportExportDisabled,
+                            tooltip: isHtmlReportExportDisabled ? htmlReportDisabledTooltip : undefined,
+                          },
                         ].map((opt, index) => (
                           <button
                             key={opt.id}
@@ -3667,6 +3686,7 @@ export function FlightList({
                             }}
                             onMouseEnter={() => !opt.disabled && setExportHighlightedIndex(index)}
                             disabled={opt.disabled}
+                            title={opt.tooltip}
                             className={`themed-select-option w-full text-left px-3 py-2 text-sm rounded transition-colors ${opt.disabled
                               ? 'text-gray-500 cursor-not-allowed'
                               : index === exportHighlightedIndex ? 'bg-drone-primary/20' : ''
