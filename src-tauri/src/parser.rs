@@ -43,8 +43,6 @@ const MAX_GPS_JUMP_SPEED_MPS: f64 = 120.0;
 const MAX_DISTANCE_FROM_HOME_M: f64 = 50_000.0;
 /// Hard cap for plausible jump distance between consecutive accepted GPS points.
 const MAX_GPS_STEP_DISTANCE_M: f64 = 50000.0;
-/// Drop a frame if fly_time changes by more than 5 seconds from the previous accepted frame.
-const MAX_FLY_TIME_JUMP_MS: i64 = 5_000;
 /// Pack battery voltage above this is considered invalid for these DJI logs.
 const MAX_BATTERY_VOLTAGE_V: f64 = 30.0;
 
@@ -936,14 +934,12 @@ impl<'a> LogParser<'a> {
     /// Extract telemetry points from parsed frames
     fn extract_telemetry(&self, frames: &[Frame], details_total_time_secs: f64) -> Vec<TelemetryPoint> {
         let mut points = Vec::with_capacity(frames.len());
-        let mut timestamp_ms: i64 = 0;
-        let mut prev_fly_time_ms: Option<i64> = None;
         let mut home_gps: Option<(f64, f64)> = None;
         let mut prev_valid_gps: Option<(f64, f64, i64)> = None;
 
         // Counters for logging
-        let mut skipped_fly_time_jump: usize = 0;
-        let mut adjusted_fly_time_jump: usize = 0;
+        let mut nearest_too_far_count: usize = 0;
+        let mut nearest_reused_frame_count: usize = 0;
         let mut skipped_corrupt: usize = 0;
         let mut skipped_no_gps: usize = 0;
         let mut skipped_out_of_range: usize = 0;
@@ -952,10 +948,6 @@ impl<'a> LogParser<'a> {
         let mut skipped_alt_clamp: usize = 0;
         let mut skipped_speed_clamp: usize = 0;
         let mut skipped_battery_voltage_clamp: usize = 0;
-
-        // Check if any frame has a non-zero fly_time
-        let has_fly_time = frames.iter().any(|f| f.osd.fly_time > 0.0);
-        log::debug!("fly_time available: {}", has_fly_time);
 
         // Derive frame cadence from parser-reported total duration when available.
         // This keeps timestamp progression aligned with real frame rate even when
@@ -966,77 +958,43 @@ impl<'a> LogParser<'a> {
             100 // conservative fallback when cadence cannot be estimated
         };
 
+        let sampling_plan = build_fly_time_sampling_plan(frames, fallback_interval_ms);
+        log::debug!("fly_time available: {}", sampling_plan.has_fly_time);
+        let mut nearest_cursor: usize = 0;
+        let mut prev_selected_idx: Option<usize> = None;
+
         let mut prev_is_photo = false;
         let mut prev_is_video = false;
 
-        for frame in frames {
+        for tick_idx in 0..frames.len() {
+            let current_timestamp_ms = (tick_idx as i64) * fallback_interval_ms;
+
+            let selected_idx = select_nearest_frame_index(
+                frames.len(),
+                tick_idx,
+                current_timestamp_ms,
+                sampling_plan.has_candidates,
+                &sampling_plan.candidates,
+                sampling_plan.max_nearest_gap_ms,
+                &mut nearest_cursor,
+                &mut prev_selected_idx,
+                &mut nearest_too_far_count,
+                &mut nearest_reused_frame_count,
+            );
+            let Some(selected_idx) = selected_idx else {
+                // No sufficiently close fly_time frame for this synthetic tick.
+                // Preserve timeline cadence with an empty placeholder row.
+                points.push(TelemetryPoint {
+                    timestamp_ms: current_timestamp_ms,
+                    ..Default::default()
+                });
+                continue;
+            };
+            let frame = &frames[selected_idx];
             let osd = &frame.osd;
             let gimbal = &frame.gimbal;
             let battery = &frame.battery;
             let rc = &frame.rc;
-
-            // fly_time from DJI logs often has only ~1-second resolution:
-            // e.g., fly_time=1.0 for all 10 frames in that second.
-            // We must ensure unique, monotonically increasing timestamps so that
-            // sub-second data is preserved during insertion.
-            let fly_time_ms = if osd.fly_time > 0.0 {
-                (osd.fly_time * 1000.0) as i64
-            } else {
-                0
-            };
-
-            if fly_time_ms > 0 {
-                if let Some(prev_ms) = prev_fly_time_ms {
-                    let delta_ms = fly_time_ms - prev_ms;
-                    // Only treat large forward leaps as suspicious.
-                    if delta_ms > MAX_FLY_TIME_JUMP_MS {
-                        // Classify as true poison only when time jump is paired with
-                        // impossible telemetry values.
-                        let gps_invalid = !is_finite_f64(osd.latitude)
-                            || !is_finite_f64(osd.longitude)
-                            || osd.latitude.abs() > 90.0
-                            || osd.longitude.abs() > 180.0;
-                        let sat_invalid = osd.gps_num > 80;
-                        let batt_invalid = battery.charge_level > 100;
-
-                        if gps_invalid || sat_invalid || batt_invalid {
-                            skipped_fly_time_jump += 1;
-                            if skipped_fly_time_jump <= 5 {
-                                log::warn!(
-                                    "Skipping timeline-poison frame at fly_time={}ms (prev={}ms, delta={}ms)",
-                                    fly_time_ms,
-                                    prev_ms,
-                                    delta_ms
-                                );
-                            }
-                            // Preserve periodic timeline by inserting an empty placeholder row
-                            // at this tick for dropped poison frames.
-                            points.push(TelemetryPoint {
-                                timestamp_ms,
-                                ..Default::default()
-                            });
-                            timestamp_ms = timestamp_ms + fallback_interval_ms;
-                            continue;
-                        } else {
-                            adjusted_fly_time_jump += 1;
-                            if adjusted_fly_time_jump <= 5 {
-                                log::debug!(
-                                    "Adjusting large fly_time jump at fly_time={}ms (prev={}ms, delta={}ms) and keeping plausible frame",
-                                    fly_time_ms,
-                                    prev_ms,
-                                    delta_ms
-                                );
-                            }
-                        }
-                    }
-                }
-                prev_fly_time_ms = Some(fly_time_ms);
-            }
-
-            // Keep telemetry time periodic based on inferred frame cadence.
-            // We intentionally do not anchor to raw fly_time to avoid timeline gaps
-            // from sparse/corrupt fly_time updates in some enterprise logs.
-            let current_timestamp_ms = timestamp_ms;
 
             // Validate core numeric fields — skip entire frame if data is corrupt
             // (e.g. the parser produced garbage like lat=-6.6e-136, lon=5.7e+139)
@@ -1064,7 +1022,6 @@ impl<'a> LogParser<'a> {
                     timestamp_ms: current_timestamp_ms,
                     ..Default::default()
                 });
-                timestamp_ms = current_timestamp_ms + fallback_interval_ms;
                 continue;
             }
 
@@ -1216,15 +1173,10 @@ impl<'a> LogParser<'a> {
             prev_is_video = is_video_now;
 
             points.push(point);
-
-            // Always advance by fallback interval to ensure next frame gets a unique timestamp
-            timestamp_ms = current_timestamp_ms + fallback_interval_ms;
         }
 
         // Log extraction summary
-        if skipped_fly_time_jump > 0
-            || adjusted_fly_time_jump > 0
-            || skipped_corrupt > 0
+        if skipped_corrupt > 0
             || skipped_out_of_range > 0
             || skipped_jump > 0
             || skipped_far_from_home > 0
@@ -1233,9 +1185,7 @@ impl<'a> LogParser<'a> {
             || skipped_battery_voltage_clamp > 0
         {
             log::warn!(
-                "Telemetry filtering: {} fly_time poison frames skipped, {} large fly_time jumps adjusted, {} corrupt frames skipped, {} GPS out-of-range, {} jump outliers skipped, {} >50km-home skipped, {} no-GPS-lock, {} altitude clamped, {} speed clamped, {} battery_voltage clamped",
-                skipped_fly_time_jump,
-                adjusted_fly_time_jump,
+                "Telemetry filtering: {} corrupt frames skipped, {} GPS out-of-range, {} jump outliers skipped, {} >50km-home skipped, {} no-GPS-lock, {} altitude clamped, {} speed clamped, {} battery_voltage clamped",
                 skipped_corrupt,
                 skipped_out_of_range,
                 skipped_jump,
@@ -1245,6 +1195,14 @@ impl<'a> LogParser<'a> {
                 skipped_speed_clamp,
                 skipped_battery_voltage_clamp
             );
+            if sampling_plan.has_candidates {
+                log::debug!(
+                    "Nearest fly_time sampling: {} candidates, {} synthetic ticks had no nearby candidate, {} ticks reused the same source frame",
+                    sampling_plan.candidates.len(),
+                    nearest_too_far_count,
+                    nearest_reused_frame_count
+                );
+            }
         } else {
             log::debug!(
                 "Telemetry extraction clean: {} points, {} frames without GPS lock",
@@ -1357,7 +1315,6 @@ impl<'a> LogParser<'a> {
     /// Extract app messages (tips and warnings) from parsed frames
     fn extract_messages(&self, frames: &[Frame], details_total_time_secs: f64) -> Vec<FlightMessage> {
         let mut messages = Vec::new();
-        let mut timestamp_ms: i64 = 0;
 
         // Keep message timestamps on the same cadence as telemetry so exports and
         // annotations stay aligned on high-rate logs.
@@ -1366,6 +1323,13 @@ impl<'a> LogParser<'a> {
         } else {
             100 // conservative fallback when cadence cannot be estimated
         };
+
+        let mut nearest_too_far_count: usize = 0;
+        let mut nearest_reused_frame_count: usize = 0;
+
+        let sampling_plan = build_fly_time_sampling_plan(frames, fallback_interval_ms);
+        let mut nearest_cursor: usize = 0;
+        let mut prev_selected_idx: Option<usize> = None;
 
         // ----------------------------------------------------------------
         // OSD + Gimbal state change tracking
@@ -1459,10 +1423,28 @@ impl<'a> LogParser<'a> {
             };
         }
 
-        for frame in frames {
+        for tick_idx in 0..frames.len() {
             // Keep message timestamps aligned to telemetry's periodic cadence.
             // This avoids drift when raw fly_time is sparse or corrupted.
-            let current_timestamp_ms = timestamp_ms;
+            let current_timestamp_ms = (tick_idx as i64) * fallback_interval_ms;
+
+            let selected_idx = select_nearest_frame_index(
+                frames.len(),
+                tick_idx,
+                current_timestamp_ms,
+                sampling_plan.has_candidates,
+                &sampling_plan.candidates,
+                sampling_plan.max_nearest_gap_ms,
+                &mut nearest_cursor,
+                &mut prev_selected_idx,
+                &mut nearest_too_far_count,
+                &mut nearest_reused_frame_count,
+            );
+            let Some(selected_idx) = selected_idx else {
+                // Skip message extraction for ticks with no nearby source frame.
+                continue;
+            };
+            let frame = &frames[selected_idx];
 
             // Extract tip message if present
             if !frame.app.tip.is_empty() {
@@ -1577,7 +1559,15 @@ impl<'a> LogParser<'a> {
             }
             prev_flight_action_msg = current_flight_action_msg;
 
-            timestamp_ms = current_timestamp_ms + fallback_interval_ms;
+        }
+
+        if sampling_plan.has_candidates {
+            log::debug!(
+                "Nearest fly_time message sampling: {} candidates, {} synthetic ticks had no nearby candidate, {} ticks reused the same source frame",
+                sampling_plan.candidates.len(),
+                nearest_too_far_count,
+                nearest_reused_frame_count
+            );
         }
 
         // Deduplicate consecutive identical messages (some messages repeat across frames)
@@ -1637,6 +1627,83 @@ impl<'a> LogParser<'a> {
         let duration_ms = (parser.details.total_time * 1000.0) as i64;
         Some(start + chrono::Duration::milliseconds(duration_ms))
     }
+}
+
+#[derive(Debug)]
+struct FlyTimeSamplingPlan {
+    has_fly_time: bool,
+    has_candidates: bool,
+    candidates: Vec<(i64, usize)>,
+    max_nearest_gap_ms: i64,
+}
+
+fn build_fly_time_sampling_plan(frames: &[Frame], fallback_interval_ms: i64) -> FlyTimeSamplingPlan {
+    let has_fly_time = frames.iter().any(|f| f.osd.fly_time > 0.0);
+    let mut candidates: Vec<(i64, usize)> = Vec::with_capacity(frames.len());
+
+    for (idx, frame) in frames.iter().enumerate() {
+        let osd = &frame.osd;
+        let fly_time_ms = if osd.fly_time > 0.0 {
+            (osd.fly_time * 1000.0) as i64
+        } else {
+            0
+        };
+
+        candidates.push((fly_time_ms, idx));
+    }
+
+    candidates.sort_by_key(|(t, idx)| (*t, *idx));
+
+    FlyTimeSamplingPlan {
+        has_fly_time,
+        has_candidates: !candidates.is_empty() && has_fly_time,
+        candidates,
+        max_nearest_gap_ms: (fallback_interval_ms * 3).max(500),
+    }
+}
+
+fn select_nearest_frame_index(
+    frames_len: usize,
+    tick_idx: usize,
+    target_ms: i64,
+    has_candidates: bool,
+    candidates: &[(i64, usize)],
+    max_nearest_gap_ms: i64,
+    nearest_cursor: &mut usize,
+    prev_selected_idx: &mut Option<usize>,
+    nearest_too_far_count: &mut usize,
+    nearest_reused_frame_count: &mut usize,
+) -> Option<usize> {
+    let selected_idx = if has_candidates {
+        while *nearest_cursor + 1 < candidates.len() {
+            let cur_dist = (candidates[*nearest_cursor].0 - target_ms).abs();
+            let next_dist = (candidates[*nearest_cursor + 1].0 - target_ms).abs();
+            if next_dist <= cur_dist {
+                *nearest_cursor += 1;
+            } else {
+                break;
+            }
+        }
+
+        let nearest = candidates[*nearest_cursor];
+        let nearest_dist = (nearest.0 - target_ms).abs();
+        if nearest_dist > max_nearest_gap_ms {
+            *nearest_too_far_count += 1;
+            None
+        } else {
+            if let Some(prev_idx) = *prev_selected_idx {
+                if prev_idx == nearest.1 {
+                    *nearest_reused_frame_count += 1;
+                }
+            }
+            Some(nearest.1)
+        }
+    } else {
+        Some(tick_idx.min(frames_len - 1))
+    };
+
+    *prev_selected_idx = selected_idx;
+    selected_idx
 }
 
 /// Calculate FlightStats from stored TelemetryRecords (for tag regeneration without re-parsing files)

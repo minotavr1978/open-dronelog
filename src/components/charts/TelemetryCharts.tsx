@@ -40,6 +40,8 @@ interface TelemetryFieldDef {
   /** Group this field belongs to for organization */
   group: 'altitude' | 'speed' | 'battery' | 'attitude' | 'gimbal' | 'rc' | 'gps' | 'velocity';
 }
+/** Maximum null-gap duration to visually bridge in charts (display only). */
+const MAX_DISPLAY_JOIN_GAP_SECONDS = 5.0;
 
 /** All available telemetry fields that can be plotted */
 const TELEMETRY_FIELDS: TelemetryFieldDef[] = [
@@ -205,6 +207,69 @@ function getUnitCategoryLabel(unit: string, t: TFn): string {
   return unitCategories[unit] || unit;
 }
 
+/**
+ * Display-only interpolation for short missing runs.
+ * This does not mutate source telemetry and is used only for chart rendering.
+ */
+function bridgeShortNullGaps(
+  values: (number | null)[],
+  time: number[],
+  maxGapSeconds = MAX_DISPLAY_JOIN_GAP_SECONDS
+): (number | null)[] {
+  if (values.length === 0 || values.length !== time.length) {
+    return [...values];
+  }
+
+  const bridged = [...values];
+  let i = 0;
+  while (i < bridged.length) {
+    if (typeof bridged[i] === 'number' && Number.isFinite(bridged[i])) {
+      i += 1;
+      continue;
+    }
+
+    const gapStart = i;
+    while (i < bridged.length && (bridged[i] === null || !Number.isFinite(bridged[i] as number))) {
+      i += 1;
+    }
+    const gapEnd = i - 1;
+    const leftIdx = gapStart - 1;
+    const rightIdx = i;
+
+    if (leftIdx < 0 || rightIdx >= bridged.length) {
+      continue;
+    }
+
+    const leftVal = bridged[leftIdx];
+    const rightVal = bridged[rightIdx];
+    const leftTime = time[leftIdx];
+    const rightTime = time[rightIdx];
+
+    if (
+      typeof leftVal !== 'number' ||
+      !Number.isFinite(leftVal) ||
+      typeof rightVal !== 'number' ||
+      !Number.isFinite(rightVal) ||
+      !Number.isFinite(leftTime) ||
+      !Number.isFinite(rightTime) ||
+      rightTime <= leftTime ||
+      (rightTime - leftTime) > maxGapSeconds
+    ) {
+      continue;
+    }
+
+    const span = rightTime - leftTime;
+    for (let j = gapStart; j <= gapEnd; j += 1) {
+      const t = time[j];
+      if (!Number.isFinite(t)) continue;
+      const ratio = (t - leftTime) / span;
+      bridged[j] = leftVal + (rightVal - leftVal) * ratio;
+    }
+  }
+
+  return bridged;
+}
+
 /** Create a dynamic chart based on selected fields */
 function createDynamicChart(
   selectedFieldIds: string[],
@@ -275,13 +340,17 @@ function createDynamicChart(
   ];
 
   if (allSeriesData.length === 0) return null;
+  const displaySeriesData = allSeriesData.map((series) => ({
+    ...series,
+    data: bridgeShortNullGaps(series.data, data.time),
+  }));
 
   // Create legend data
-  const legendData = allSeriesData.map(s => s.label);
+  const legendData = displaySeriesData.map(s => s.label);
 
-  // Group series by unit to share y-axis scales
+  // Group series by unit to share y-axis scales.
   const unitGroups = new Map<string, { indices: number[]; data: (number | null)[] }>();
-  allSeriesData.forEach((s, index) => {
+  displaySeriesData.forEach((s, index) => {
     const unitKey = s.unit || '__no_unit__';
     if (!unitGroups.has(unitKey)) {
       unitGroups.set(unitKey, { indices: [], data: [] });
@@ -305,17 +374,16 @@ function createDynamicChart(
   }
 
   // Create series with y-axis index based on unit
-  const series: LineSeriesOption[] = allSeriesData.map((s, index) => {
+  const series: LineSeriesOption[] = displaySeriesData.map((s, index) => {
     const unitKey = s.unit || '__no_unit__';
-    const yAxisIndex = allSeriesData.length > 1 ? unitToAxisIndex.get(unitKey) ?? 0 : 0;
-    const connectRcNulls = s.fieldId === 'rcSignal' || s.fieldId === 'rcUplink' || s.fieldId === 'rcDownlink';
+    const yAxisIndex = displaySeriesData.length > 1 ? unitToAxisIndex.get(unitKey) ?? 0 : 0;
     return {
       name: s.label,
       type: 'line',
       data: s.data,
       yAxisIndex,
       smooth: true,
-      connectNulls: connectRcNulls,
+      connectNulls: false,
       symbol: 'none',
       itemStyle: { color: s.color },
       lineStyle: { color: s.color, width: index === 0 ? 2 : 1.5 },
@@ -342,9 +410,9 @@ function createDynamicChart(
     const range = unitRanges.get(unit)!;
     // Use the first series with this unit for display properties
     const firstSeriesIndex = group.indices[0];
-    const s = allSeriesData[firstSeriesIndex];
+    const s = displaySeriesData[firstSeriesIndex];
     // Build axis name: if multiple series share this unit, show descriptive category; otherwise show label with unit
-    const seriesWithUnit = group.indices.map(i => allSeriesData[i]);
+    const seriesWithUnit = group.indices.map(i => displaySeriesData[i]);
     const axisName = seriesWithUnit.length > 1 && s.unit
       ? getUnitCategoryLabel(s.unit, t)
       : (s.unit ? `${s.label} (${s.unit})` : s.label);
@@ -1608,7 +1676,7 @@ function createAltitudeSpeedChart(
       {
         name: t('telemetry.height'),
         type: 'line',
-        data: heightSeries,
+        data: bridgeShortNullGaps(heightSeries, data.time),
         yAxisIndex: 0,
         smooth: true,
         symbol: 'none',
@@ -1636,7 +1704,7 @@ function createAltitudeSpeedChart(
       {
         name: t('telemetry.vpsHeight'),
         type: 'line',
-        data: vpsHeightSeries,
+        data: bridgeShortNullGaps(vpsHeightSeries, data.time),
         yAxisIndex: 0,
         smooth: true,
         symbol: 'none',
@@ -1651,7 +1719,7 @@ function createAltitudeSpeedChart(
       {
         name: t('telemetry.speed'),
         type: 'line',
-        data: speedSeries,
+        data: bridgeShortNullGaps(speedSeries, data.time),
         yAxisIndex: 1,
         smooth: true,
         symbol: 'none',
@@ -1759,7 +1827,7 @@ function createBatteryChart(
       {
         name: t('telemetry.batteryPercent'),
         type: 'line',
-        data: data.battery,
+        data: bridgeShortNullGaps(data.battery, data.time),
         smooth: true,
         symbol: 'none',
         itemStyle: {
@@ -1793,7 +1861,7 @@ function createBatteryChart(
       {
         name: t('telemetry.voltage'),
         type: 'line',
-        data: data.batteryVoltage,
+        data: bridgeShortNullGaps(data.batteryVoltage, data.time),
         yAxisIndex: 2,
         smooth: true,
         symbol: 'none',
@@ -1808,7 +1876,7 @@ function createBatteryChart(
       {
         name: t('telemetry.temperature'),
         type: 'line',
-        data: batteryTempSeries,
+        data: bridgeShortNullGaps(batteryTempSeries, data.time),
         yAxisIndex: 1,
         smooth: true,
         symbol: 'none',
@@ -1886,7 +1954,7 @@ function createCellVoltageChart(
   const series: LineSeriesOption[] = cellSeries.map((values, i) => ({
     name: t('telemetry.cell', { n: i + 1 }),
     type: 'line',
-    data: values,
+    data: bridgeShortNullGaps(values, data.time),
     smooth: true,
     symbol: 'none',
     itemStyle: {
@@ -1992,7 +2060,7 @@ function createAttitudeChart(
       {
         name: t('telemetry.pitch'),
         type: 'line',
-        data: data.pitch,
+        data: bridgeShortNullGaps(data.pitch, data.time),
         smooth: true,
         symbol: 'none',
         itemStyle: {
@@ -2006,7 +2074,7 @@ function createAttitudeChart(
       {
         name: t('telemetry.roll'),
         type: 'line',
-        data: data.roll,
+        data: bridgeShortNullGaps(data.roll, data.time),
         smooth: true,
         symbol: 'none',
         itemStyle: {
@@ -2020,7 +2088,7 @@ function createAttitudeChart(
       {
         name: t('telemetry.yaw'),
         type: 'line',
-        data: data.yaw,
+        data: bridgeShortNullGaps(data.yaw, data.time),
         smooth: true,
         symbol: 'none',
         itemStyle: {
@@ -2093,7 +2161,7 @@ function createGimbalChart(
       {
         name: t('telemetry.gimbalPitch'),
         type: 'line',
-        data: gimbalPitch,
+        data: bridgeShortNullGaps(gimbalPitch, data.time),
         smooth: true,
         symbol: 'none',
         itemStyle: {
@@ -2107,7 +2175,7 @@ function createGimbalChart(
       {
         name: t('telemetry.gimbalRoll'),
         type: 'line',
-        data: gimbalRoll,
+        data: bridgeShortNullGaps(gimbalRoll, data.time),
         smooth: true,
         symbol: 'none',
         itemStyle: {
@@ -2121,7 +2189,7 @@ function createGimbalChart(
       {
         name: t('telemetry.gimbalYaw'),
         type: 'line',
-        data: gimbalYaw,
+        data: bridgeShortNullGaps(gimbalYaw, data.time),
         smooth: true,
         symbol: 'none',
         itemStyle: {
@@ -2158,9 +2226,9 @@ function createRcSignalChart(
         {
           name: t('telemetry.rcSignal'),
           type: 'line' as const,
-          data: rcSignal,
+          data: bridgeShortNullGaps(rcSignal, data.time),
           smooth: true,
-          connectNulls: true,
+          connectNulls: false,
           symbol: 'none',
           itemStyle: {
             color: '#22c55e',
@@ -2175,9 +2243,9 @@ function createRcSignalChart(
         {
           name: t('telemetry.rcUplink'),
           type: 'line' as const,
-          data: rcUplink,
+          data: bridgeShortNullGaps(rcUplink, data.time),
           smooth: true,
-          connectNulls: true,
+          connectNulls: false,
           symbol: 'none',
           itemStyle: {
             color: '#22c55e',
@@ -2190,9 +2258,9 @@ function createRcSignalChart(
         {
           name: t('telemetry.rcDownlink'),
           type: 'line' as const,
-          data: rcDownlink,
+          data: bridgeShortNullGaps(rcDownlink, data.time),
           smooth: true,
-          connectNulls: true,
+          connectNulls: false,
           symbol: 'none',
           itemStyle: {
             color: '#38bdf8',
@@ -2299,7 +2367,7 @@ function createDistanceToHomeChart(
       {
         name: t('telemetry.distToHome'),
         type: 'line',
-        data: distanceSeries,
+        data: bridgeShortNullGaps(distanceSeries, data.time),
         smooth: true,
         symbol: 'none',
         itemStyle: {
@@ -2376,7 +2444,7 @@ function createVelocityChart(
       {
         name: t('telemetry.xSpeed'),
         type: 'line',
-        data: xSeries,
+        data: bridgeShortNullGaps(xSeries, data.time),
         smooth: true,
         symbol: 'none',
         itemStyle: {
@@ -2390,7 +2458,7 @@ function createVelocityChart(
       {
         name: t('telemetry.ySpeed'),
         type: 'line',
-        data: ySeries,
+        data: bridgeShortNullGaps(ySeries, data.time),
         smooth: true,
         symbol: 'none',
         itemStyle: {
@@ -2404,7 +2472,7 @@ function createVelocityChart(
       {
         name: t('telemetry.zSpeed'),
         type: 'line',
-        data: zSeries,
+        data: bridgeShortNullGaps(zSeries, data.time),
         smooth: true,
         symbol: 'none',
         itemStyle: {
@@ -2505,7 +2573,7 @@ function createGpsChart(
       {
         name: t('telemetry.gpsSatellites'),
         type: 'line',
-        data: data.satellites,
+        data: bridgeShortNullGaps(data.satellites, data.time),
         smooth: true,
         symbol: 'none',
         itemStyle: {
