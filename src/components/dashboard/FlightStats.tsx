@@ -92,12 +92,12 @@ export function FlightStats({ data }: FlightStatsProps) {
     setIsAddingTag(false);
   };
 
-  // Calculate min battery from telemetry, ignoring 0 values
-  const minBattery = telemetry.battery.reduce<number | null>((min, val) => {
-    if (val === null || val === 0) return min;
-    if (min === null) return val;
-    return val < min ? val : min;
-  }, null);
+  // Calculate battery levels from telemetry, ignoring null/0 placeholders
+  const nonZeroBatteryValues = telemetry.battery.filter(
+    (val): val is number => val !== null && val > 0
+  );
+  const minBattery = nonZeroBatteryValues.length ? Math.min(...nonZeroBatteryValues) : null;
+  const maxBattery = nonZeroBatteryValues.length ? Math.max(...nonZeroBatteryValues) : null;
 
   const exportOptions = useMemo(
     () => [
@@ -331,9 +331,18 @@ export function FlightStats({ data }: FlightStatsProps) {
         <div className="flex-1 min-w-[120px] xl:min-w-0">
           <StatCard
             label={t('flightStats.minBattery')}
-            value={minBattery !== null ? `${minBattery}%` : '--'}
-            icon={<BatteryIcon percent={minBattery} />}
-            alert={minBattery !== null && minBattery < 20}
+            value={
+              maxBattery !== null && minBattery !== null ? (
+                <span className="whitespace-nowrap">
+                  <span className={getBatteryLevelColorClass(maxBattery)}>{maxBattery}%</span>
+                  <span className="mx-1 text-gray-400">—</span>
+                  <span className={getBatteryLevelColorClass(minBattery)}>{minBattery}%</span>
+                </span>
+              ) : (
+                '--'
+              )
+            }
+            icon={<BatteryIcon />}
           />
         </div>
         <div className="flex-1 min-w-[100px] xl:min-w-0">
@@ -416,7 +425,7 @@ export function FlightStats({ data }: FlightStatsProps) {
 
 interface StatCardProps {
   label: string;
-  value: string;
+  value: React.ReactNode;
   icon: React.ReactNode;
   alert?: boolean;
 }
@@ -514,23 +523,20 @@ function SpeedIcon() {
   );
 }
 
-function BatteryIcon({ percent }: { percent: number | null }) {
-  const fill = percent !== null ? Math.max(0, Math.min(100, percent)) : 50;
-  const color =
-    fill < 20 ? 'text-red-400' : fill < 50 ? 'text-yellow-400' : 'text-green-400';
-
+function BatteryIcon() {
   return (
-    <svg className={`w-5 h-5 ${color}`} viewBox="0 0 24 24" fill="currentColor">
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
       <path d="M17 4h-3V2h-4v2H7a2 2 0 00-2 2v16a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2zM7 22V6h10v16H7z" />
-      <rect
-        x="8"
-        y={22 - (fill / 100) * 15}
-        width="8"
-        height={(fill / 100) * 15}
-        rx="1"
-      />
+      <rect x="8" y="10" width="8" height="10" rx="1" />
     </svg>
   );
+}
+
+function getBatteryLevelColorClass(level: number): string {
+  if (level <= 15) return 'text-red-400';
+  if (level <= 30) return 'text-orange-400';
+  if (level <= 50) return 'text-yellow-400';
+  return 'text-green-400';
 }
 
 function ExportIcon() {
