@@ -209,7 +209,9 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (isOpen) {
       void (async () => {
         checkApiKey();
-        getAppLogDir();
+        if (!webMode) {
+          getAppLogDir();
+        }
         loadSmartTagsEnabled();
         fetchAppVersion();
         setBlacklistCount((await getBlacklist()).size);
@@ -1608,13 +1610,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     </span>
                   )}
                 </p>
-                <p className="text-xs text-gray-500 mt-2">
-                  <strong className="text-gray-400">{t('settings.logLocation')}</strong>
-                  <br />
-                  <code className="text-xs text-gray-400 bg-drone-dark px-1 py-0.5 rounded break-all">
-                    {appLogDir || t('settings.loading')}
-                  </code>
-                </p>
+                {!webMode && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    <strong className="text-gray-400">{t('settings.logLocation')}</strong>
+                    <br />
+                    <code className="text-xs text-gray-400 bg-drone-dark px-1 py-0.5 rounded break-all">
+                      {appLogDir || t('settings.loading')}
+                    </code>
+                  </p>
+                )}
 
                 {/* Keep Uploaded Files - Only show in Tauri desktop mode */}
                 {!isWebMode() && keepUploadSettings && (
