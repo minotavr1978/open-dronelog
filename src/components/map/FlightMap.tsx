@@ -386,6 +386,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
   const [showAircraft, setShowAircraft] = useState(() => getSessionBool('map:showAircraft', true));
   const [showMedia, setShowMedia] = useState(() => getSessionBool('map:showMedia', false));
   const [showMessages, setShowMessages] = useState(() => getSessionBool('map:showMessages', true));
+  const [tracePath, setTracePath] = useState(() => getSessionBool('map:tracePath', true));
   const [simplified, setSimplified] = useState(() => {
     if (typeof window === 'undefined') return true;
     const stored = window.localStorage.getItem('map:simplified');
@@ -513,6 +514,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
       window.sessionStorage.setItem('map:showAircraft', String(showAircraft));
       window.sessionStorage.setItem('map:showMedia', String(showMedia));
       window.sessionStorage.setItem('map:showMessages', String(showMessages));
+      window.sessionStorage.setItem('map:tracePath', String(tracePath));
       window.sessionStorage.setItem('map:lineThickness', String(lineThickness));
       window.sessionStorage.setItem('map:settingsCollapsed', String(mapSettingsCollapsed));
     }
@@ -524,6 +526,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
     showAircraft,
     showMedia,
     showMessages,
+    tracePath,
     simplified,
     lineThickness,
     mapSettingsCollapsed,
@@ -677,6 +680,14 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
   // Whether the replay is actively showing (playing or scrubbed away from 0)
   const replayActive = showAircraft && (isPlaying || replayProgress > 0);
 
+  // Optionally render only the travelled portion of the path while replay is active.
+  const tracePathActive = tracePath && replayActive;
+  const displayedTrack = useMemo(() => {
+    if (!tracePathActive || track.length < 2) return track;
+    const maxIdx = Math.max(1, Math.min(track.length - 1, Math.floor(replayProgress * (track.length - 1))));
+    return track.slice(0, maxIdx + 1);
+  }, [tracePathActive, track, replayProgress]);
+
   // Interpolate telemetry at current replay position
   const replayTelemetry = useMemo(() => {
     if (!telemetry || !telemetry.time || telemetry.time.length === 0 || track.length === 0) return null;
@@ -818,26 +829,26 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
 
   // Smooth the raw GPS track
   const smoothedTrack = useMemo(() => {
-    if (track.length < 3) return track;
+    if (displayedTrack.length < 3) return displayedTrack;
     if (simplified) {
       // Simplified: two passes of moving-average for noise reduction
       // with minimal vertex count — works well on all devices.
-      const pass1 = movingAverageSmooth(track, 5);
+      const pass1 = movingAverageSmooth(displayedTrack, 5);
       return movingAverageSmooth(pass1, 4);
     }
     // Full mode: cap raw points before Catmull-Rom to avoid creating
     // an excessive number of segments (resolution 4 = 4x multiplier).
     // 3000 raw → ~12000 smoothed points is plenty for visual fidelity.
-    const capped = track.length > 3000 ? downsample(track, 3000) : track;
+    const capped = displayedTrack.length > 3000 ? downsample(displayedTrack, 3000) : displayedTrack;
     return smoothTrack(capped, 4);
-  }, [track, simplified]);
+  }, [displayedTrack, simplified]);
 
   const deckPathData = useMemo(() => {
     if (smoothedTrack.length < 2) return [];
 
     const toAlt = (altitude: number) => (is3D ? altitude : 0);
     const n = smoothedTrack.length;
-    const rawN = track.length;
+    const rawN = displayedTrack.length;
 
     // ── Simplified: single multi-point path with solid color ──────
     // This reduces GPU draw calls from thousands to 1, which is
@@ -1090,7 +1101,7 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
     flushBatch();
 
     return segments;
-  }, [is3D, smoothedTrack, track, colorBy, homeLat, homeLon, telemetry, durationSecs, showTooltip, simplified]);
+  }, [is3D, smoothedTrack, displayedTrack, colorBy, homeLat, homeLon, telemetry, durationSecs, showTooltip, simplified]);
 
   // ── Simplified 2D: GeoJSON for MapLibre native line layer ──────
   const simplifiedPathGeoJSON = useMemo(() => {
@@ -1434,8 +1445,8 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
   }, [showMedia, mediaClusters]);
 
   // Start and end markers
-  const startPoint = track.length > 0 ? track[0] : undefined;
-  const endPoint = track.length > 0 ? track[track.length - 1] : undefined;
+  const startPoint = displayedTrack.length > 0 ? displayedTrack[0] : undefined;
+  const endPoint = displayedTrack.length > 0 ? displayedTrack[displayedTrack.length - 1] : undefined;
 
   const handleMapMove = useCallback(
     ({ viewState: nextViewState }: { viewState: typeof viewState }) => {
@@ -1552,6 +1563,12 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
       window.sessionStorage.setItem('map:showMessages', String(showMessages));
     }
   }, [showMessages]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem('map:tracePath', String(tracePath));
+    }
+  }, [tracePath]);
 
   useEffect(() => {
     if (is3D) {
@@ -1693,6 +1710,11 @@ export function FlightMap({ track, homeLat, homeLon, durationSecs, telemetry, th
                 label={t('map.messages')}
                 checked={showMessages}
                 onChange={setShowMessages}
+              />
+              <ToggleRow
+                label="Trace path"
+                checked={tracePath}
+                onChange={setTracePath}
               />
               <ToggleRow
                 label={t('map.simplified')}
