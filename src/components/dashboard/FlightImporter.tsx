@@ -451,9 +451,9 @@ export function FlightImporter() {
     
     // Helper to refresh flight list in background (non-blocking)
     const refreshFlightListBackground = () => {
-      const { loadFlights, loadAllTags } = useFlightStore.getState();
+      const { loadFlights, loadOverview, loadAllTags } = useFlightStore.getState();
       // Don't await - let it run in background
-      loadFlights().then(() => loadAllTags());
+      Promise.allSettled([loadFlights(), loadOverview()]).then(() => loadAllTags());
     };
 
     // Get existing hashes + blacklist for sync mode, so we can skip duplicates before import.
@@ -573,8 +573,8 @@ export function FlightImporter() {
       // Final refresh at the end
       if (processed > 0) {
         setCurrentFileName(t('importer.refreshingList'));
-        const { loadFlights, loadAllTags } = useFlightStore.getState();
-        await loadFlights();
+        const { loadFlights, loadOverview, loadAllTags } = useFlightStore.getState();
+        await Promise.all([loadFlights(), loadOverview()]);
         loadAllTags();
       }
 
@@ -675,8 +675,8 @@ export function FlightImporter() {
       // Final refresh to ensure everything is up to date
       if (processed > 0) {
         setCurrentFileName(t('importer.refreshingList'));
-        const { loadFlights, loadAllTags } = useFlightStore.getState();
-        await loadFlights();
+        const { loadFlights, loadOverview, loadAllTags } = useFlightStore.getState();
+        await Promise.all([loadFlights(), loadOverview()]);
         loadAllTags();
       }
 
@@ -1209,8 +1209,8 @@ export function FlightImporter() {
               processed++;
               // Refresh flight list every 10 files to show progress
               if (processed % REFRESH_INTERVAL === 0) {
-                const { loadFlights, loadAllTags } = useFlightStore.getState();
-                loadFlights().then(() => loadAllTags());
+                const { loadFlights, loadOverview, loadAllTags } = useFlightStore.getState();
+                Promise.allSettled([loadFlights(), loadOverview()]).then(() => loadAllTags());
               }
 
               // Match browse import behavior: cooldown only for default/shared key.
@@ -1249,8 +1249,8 @@ export function FlightImporter() {
         
         // Final refresh
         if (processed > 0) {
-          const { loadFlights, loadAllTags } = useFlightStore.getState();
-          await loadFlights();
+          const { loadFlights, loadOverview, loadAllTags } = useFlightStore.getState();
+          await Promise.all([loadFlights(), loadOverview()]);
           loadAllTags();
         }
         
