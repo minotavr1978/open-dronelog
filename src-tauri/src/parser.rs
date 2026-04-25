@@ -1639,14 +1639,29 @@ struct FlyTimeSamplingPlan {
 
 fn build_fly_time_sampling_plan(frames: &[Frame], fallback_interval_ms: i64) -> FlyTimeSamplingPlan {
     let has_fly_time = frames.iter().any(|f| f.osd.fly_time > 0.0);
+    let first_fly_time_ms = frames
+        .iter()
+        .find_map(|f| {
+            if f.osd.fly_time.is_finite() && f.osd.fly_time >= 0.0 {
+                Some((f.osd.fly_time * 1000.0) as i64)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(0);
     let mut candidates: Vec<(i64, usize)> = Vec::with_capacity(frames.len());
 
     for (idx, frame) in frames.iter().enumerate() {
         let osd = &frame.osd;
-        let fly_time_ms = if osd.fly_time > 0.0 {
+        let raw_fly_time_ms = if osd.fly_time.is_finite() && osd.fly_time > 0.0 {
             (osd.fly_time * 1000.0) as i64
         } else {
             0
+        };
+        let fly_time_ms = if first_fly_time_ms > 0 && raw_fly_time_ms > 0 {
+            raw_fly_time_ms.saturating_sub(first_fly_time_ms)
+        } else {
+            raw_fly_time_ms
         };
 
         candidates.push((fly_time_ms, idx));
