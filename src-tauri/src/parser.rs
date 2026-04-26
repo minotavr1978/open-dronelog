@@ -1824,3 +1824,88 @@ fn is_finite_f64(v: f64) -> bool {
 fn is_finite_f32(v: f32) -> bool {
     v.is_finite()
 }
+
+// ============================================================================
+// Shared post-import pipeline
+// ============================================================================
+
+/// Run all post-import steps after a flight and its telemetry have been
+/// inserted into the database.  This is the single canonical location for
+/// the logic that was previously duplicated across `tauri_app::import_log`,
+/// `server::import_log`, `server::sync_single_file`, `server::sync_from_folder`,
+/// and `server::run_scheduled_sync`.
+///
+/// Steps performed:
+///  1. Insert smart tags (filtered by enabled_tag_types if configured)
+///  2. Insert manual tags from re-imported CSV exports
+///  3. Auto-tag with profile name for non-default profiles
+///  4. Insert notes from re-imported CSV exports
+///  5. Apply color from re-imported CSV exports
+///  6. Insert app messages (tips and warnings) from DJI logs
+///  7. Restore previously saved user customizations (display_name, notes, color, manual tags)
+pub fn run_post_import_steps(
+    db: &Database,
+    flight_id: i64,
+    parse_result: &ParseResult,
+    config: &serde_json::Value,
+    profile: &str,
+) {
+    let tags_enabled = config.get("smart_tags_enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+
+    // 1. Insert smart tags if enabled
+    if tags_enabled {
+        let tags = if let Some(types) = config.get("enabled_tag_types").and_then(|v| v.as_array()) {
+            let enabled_types: Vec<String> = types.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect();
+            LogParser::filter_smart_tags(parse_result.tags.clone(), &enabled_types)
+        } else {
+            parse_result.tags.clone()
+        };
+        if let Err(e) = db.insert_flight_tags(flight_id, &tags) {
+            log::warn!("Failed to insert tags for flight {}: {}", flight_id, e);
+        }
+    }
+
+    // 2. Insert manual tags from re-imported CSV exports (always, regardless of smart_tags_enabled)
+    for manual_tag in &parse_result.manual_tags {
+        if let Err(e) = db.add_flight_tag(flight_id, manual_tag) {
+            log::warn!("Failed to insert manual tag '{}' for flight {}: {}", manual_tag, flight_id, e);
+        }
+    }
+
+    // 3. Auto-tag with profile name for non-default profiles
+    if profile != "default" {
+        if let Err(e) = db.add_flight_tag(flight_id, profile) {
+            log::warn!("Failed to insert profile tag '{}' for flight {}: {}", profile, flight_id, e);
+        }
+    }
+
+    // 4. Insert notes from re-imported CSV exports
+    if let Some(ref notes) = parse_result.notes {
+        if let Err(e) = db.update_flight_notes(flight_id, Some(notes.as_str())) {
+            log::warn!("Failed to insert notes for flight {}: {}", flight_id, e);
+        }
+    }
+
+    // 5. Apply color from re-imported CSV exports
+    if let Some(ref color) = parse_result.color {
+        if let Err(e) = db.update_flight_color(flight_id, color) {
+            log::warn!("Failed to set color for flight {}: {}", flight_id, e);
+        }
+    }
+
+    // 6. Insert app messages (tips and warnings) from DJI logs
+    if !parse_result.messages.is_empty() {
+        if let Err(e) = db.insert_flight_messages(flight_id, &parse_result.messages) {
+            log::warn!("Failed to insert messages for flight {}: {}", flight_id, e);
+        }
+    }
+
+    // 7. Restore previously saved user customizations (display_name, notes, color, manual tags)
+    if let Some(ref hash) = parse_result.metadata.file_hash {
+        if let Err(e) = db.apply_saved_customizations(flight_id, hash) {
+            log::warn!("Failed to restore customizations for flight {}: {}", flight_id, e);
+        }
+    }
+}

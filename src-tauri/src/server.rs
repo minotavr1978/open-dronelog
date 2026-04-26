@@ -408,74 +408,10 @@ async fn import_log(
         }
     };
 
-    // Insert smart tags if the feature is enabled
-    let config_path = pdb.config_path();
-    let config: serde_json::Value = if config_path.exists() {
-        std::fs::read_to_string(&config_path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or(serde_json::json!({}))
-    } else {
-        serde_json::json!({})
-    };
-    let tags_enabled = config.get("smart_tags_enabled").and_then(|v| v.as_bool()).unwrap_or(true);
-    
-    if tags_enabled {
-        // Filter tags based on enabled_tag_types if configured
-        let tags = if let Some(types) = config.get("enabled_tag_types").and_then(|v| v.as_array()) {
-            let enabled_types: Vec<String> = types.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect();
-            crate::parser::LogParser::filter_smart_tags(parse_result.tags.clone(), &enabled_types)
-        } else {
-            parse_result.tags.clone()
-        };
-        if let Err(e) = pdb.db.insert_flight_tags(flight_id, &tags) {
-            log::warn!("Failed to insert tags for flight {}: {}", flight_id, e);
-        }
-    }
-
-    // Insert manual tags from re-imported CSV exports (always inserted regardless of smart_tags_enabled)
-    for manual_tag in &parse_result.manual_tags {
-        if let Err(e) = pdb.db.add_flight_tag(flight_id, manual_tag) {
-            log::warn!("Failed to insert manual tag '{}' for flight {}: {}", manual_tag, flight_id, e);
-        }
-    }
-
-    // Auto-tag with profile name for non-default profiles
-    if pdb.profile != "default" {
-        if let Err(e) = pdb.db.add_flight_tag(flight_id, &pdb.profile) {
-            log::warn!("Failed to insert profile tag '{}' for flight {}: {}", pdb.profile, flight_id, e);
-        }
-    }
-
-    // Insert notes from re-imported CSV exports
-    if let Some(ref notes) = parse_result.notes {
-        if let Err(e) = pdb.db.update_flight_notes(flight_id, Some(notes.as_str())) {
-            log::warn!("Failed to insert notes for flight {}: {}", flight_id, e);
-        }
-    }
-
-    // Apply color from re-imported CSV exports
-    if let Some(ref color) = parse_result.color {
-        if let Err(e) = pdb.db.update_flight_color(flight_id, color) {
-            log::warn!("Failed to set color for flight {}: {}", flight_id, e);
-        }
-    }
-
-    // Insert app messages (tips and warnings) from DJI logs
-    if !parse_result.messages.is_empty() {
-        if let Err(e) = pdb.db.insert_flight_messages(flight_id, &parse_result.messages) {
-            log::warn!("Failed to insert messages for flight {}: {}", flight_id, e);
-        }
-    }
-
-    // Restore any previously saved user customizations (display_name, notes, color, manual tags)
-    if let Some(ref hash) = parse_result.metadata.file_hash {
-        if let Err(e) = pdb.db.apply_saved_customizations(flight_id, hash) {
-            log::warn!("Failed to restore customizations for flight {}: {}", flight_id, e);
-        }
-    }
+    // Run all post-import steps (smart tags, manual tags, profile tags,
+    // notes, color, messages, and customization restore)
+    let config = crate::models::load_profile_config(&pdb.config_path());
+    crate::parser::run_post_import_steps(&pdb.db, flight_id, &parse_result, &config, &pdb.profile);
 
     log::info!(
         "Successfully imported flight {} with {} points in {:.1}s",
@@ -1024,17 +960,8 @@ async fn remove_all_auto_tags(
 async fn get_smart_tags_enabled(
     pdb: ProfileDb,
 ) -> Json<bool> {
-    let config_path = pdb.config_path();
-    let enabled = if config_path.exists() {
-        std::fs::read_to_string(&config_path)
-            .ok()
-            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.get("smart_tags_enabled").and_then(|v| v.as_bool()))
-            .unwrap_or(true)
-    } else {
-        true
-    };
-    Json(enabled)
+    let config = crate::models::load_profile_config(&pdb.config_path());
+    Json(config.get("smart_tags_enabled").and_then(|v| v.as_bool()).unwrap_or(true))
 }
 
 /// POST /api/settings/smart_tags — Set smart tags enabled
@@ -1048,15 +975,10 @@ async fn set_smart_tags_enabled(
     Json(payload): Json<SmartTagsPayload>,
 ) -> Result<Json<bool>, (StatusCode, Json<ErrorResponse>)> {
     let config_path = pdb.config_path();
-    let mut config: serde_json::Value = if config_path.exists() {
-        let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
-    } else {
-        serde_json::json!({})
-    };
+    let mut config = crate::models::load_profile_config(&config_path);
     config["smart_tags_enabled"] = serde_json::json!(payload.enabled);
-    std::fs::write(&config_path, serde_json::to_string_pretty(&config).unwrap())
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write config: {}", e)))?;
+    crate::models::save_profile_config(&config_path, &config)
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, e))?;
     Ok(Json(payload.enabled))
 }
 
@@ -1064,17 +986,11 @@ async fn set_smart_tags_enabled(
 async fn get_enabled_tag_types(
     pdb: ProfileDb,
 ) -> Result<Json<Vec<String>>, (StatusCode, Json<ErrorResponse>)> {
-    let config_path = pdb.config_path();
-    if config_path.exists() {
-        let content = std::fs::read_to_string(&config_path)
-            .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read config: {}", e)))?;
-        let val: serde_json::Value = serde_json::from_str(&content)
-            .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to parse config: {}", e)))?;
-        if let Some(types) = val.get("enabled_tag_types").and_then(|v| v.as_array()) {
-            return Ok(Json(types.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect()));
-        }
+    let config = crate::models::load_profile_config(&pdb.config_path());
+    if let Some(types) = config.get("enabled_tag_types").and_then(|v| v.as_array()) {
+        return Ok(Json(types.iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect()));
     }
     // Default: return all tag types
     Ok(Json(vec![
@@ -1098,15 +1014,10 @@ async fn set_enabled_tag_types(
     Json(payload): Json<EnabledTagTypesPayload>,
 ) -> Result<Json<Vec<String>>, (StatusCode, Json<ErrorResponse>)> {
     let config_path = pdb.config_path();
-    let mut config: serde_json::Value = if config_path.exists() {
-        let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-        serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
-    } else {
-        serde_json::json!({})
-    };
+    let mut config = crate::models::load_profile_config(&config_path);
     config["enabled_tag_types"] = serde_json::json!(payload.types.clone());
-    std::fs::write(&config_path, serde_json::to_string_pretty(&config).unwrap())
-        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write config: {}", e)))?;
+    crate::models::save_profile_config(&config_path, &config)
+        .map_err(|e| err_response(StatusCode::INTERNAL_SERVER_ERROR, e))?;
     Ok(Json(payload.types))
 }
 
@@ -1185,36 +1096,7 @@ async fn regenerate_flight_smart_tags(
     let flight = pdb.db.get_flight_by_id(flight_id)
         .map_err(|e| err_response(StatusCode::NOT_FOUND, format!("Failed to get flight {}: {}", flight_id, e)))?;
 
-    let metadata = crate::models::FlightMetadata {
-        id: flight.id,
-        file_name: flight.file_name.clone(),
-        display_name: flight.display_name.clone(),
-        file_hash: None,
-        drone_model: flight.drone_model.clone(),
-        drone_serial: flight.drone_serial.clone(),
-        aircraft_name: flight.aircraft_name.clone(),
-        battery_serial: flight.battery_serial.clone(),
-        start_time: flight.start_time.as_deref()
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-            .map(|dt| dt.with_timezone(&chrono::Utc))
-            .or_else(|| flight.start_time.as_deref()
-                .and_then(|s| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S").ok()
-                    .or_else(|| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f").ok()))
-                .map(|ndt| ndt.and_utc())),
-        end_time: None,
-        duration_secs: flight.duration_secs,
-        total_distance: flight.total_distance,
-        max_altitude: flight.max_altitude,
-        max_speed: flight.max_speed,
-        home_lat: flight.home_lat,
-        home_lon: flight.home_lon,
-        point_count: flight.point_count.unwrap_or(0),
-        photo_count: flight.photo_count.unwrap_or(0),
-        video_count: flight.video_count.unwrap_or(0),
-        cycle_count: flight.cycle_count,
-        rc_serial: flight.rc_serial.clone(),
-        battery_life: flight.battery_life,
-    };
+    let metadata = crate::models::FlightMetadata::from(&flight);
 
     match pdb.db.get_flight_telemetry(flight_id, Some(50000), None) {
         Ok(records) if !records.is_empty() => {
@@ -1257,36 +1139,7 @@ async fn regenerate_smart_tags(
     for flight_id in &flight_ids {
         match pdb.db.get_flight_by_id(*flight_id) {
             Ok(flight) => {
-                let metadata = crate::models::FlightMetadata {
-                    id: flight.id,
-                    file_name: flight.file_name.clone(),
-                    display_name: flight.display_name.clone(),
-                    file_hash: None,
-                    drone_model: flight.drone_model.clone(),
-                    drone_serial: flight.drone_serial.clone(),
-                    aircraft_name: flight.aircraft_name.clone(),
-                    battery_serial: flight.battery_serial.clone(),
-                    start_time: flight.start_time.as_deref()
-                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                        .map(|dt| dt.with_timezone(&chrono::Utc))
-                        .or_else(|| flight.start_time.as_deref()
-                            .and_then(|s| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S").ok()
-                                .or_else(|| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f").ok()))
-                            .map(|ndt| ndt.and_utc())),
-                    end_time: None,
-                    duration_secs: flight.duration_secs,
-                    total_distance: flight.total_distance,
-                    max_altitude: flight.max_altitude,
-                    max_speed: flight.max_speed,
-                    home_lat: flight.home_lat,
-                    home_lon: flight.home_lon,
-                    point_count: flight.point_count.unwrap_or(0),
-                    photo_count: flight.photo_count.unwrap_or(0),
-                    video_count: flight.video_count.unwrap_or(0),
-                    cycle_count: flight.cycle_count,
-                    rc_serial: flight.rc_serial.clone(),
-                    battery_life: flight.battery_life,
-                };
+                let metadata = crate::models::FlightMetadata::from(&flight);
 
                 match pdb.db.get_flight_telemetry(*flight_id, Some(50000), None) {
                     Ok(records) if !records.is_empty() => {
@@ -1750,18 +1603,6 @@ async fn sync_single_file(
         }
     }
 
-    // Check smart tags setting
-    let config_path = pdb.config_path();
-    let config: serde_json::Value = if config_path.exists() {
-        std::fs::read_to_string(&config_path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or(serde_json::json!({}))
-    } else {
-        serde_json::json!({})
-    };
-    let tags_enabled = config.get("smart_tags_enabled").and_then(|v| v.as_bool()).unwrap_or(true);
-
     let parser = LogParser::new(&pdb.db);
 
     let parse_result = match parser.parse_log(&file_path).await {
@@ -1817,56 +1658,10 @@ async fn sync_single_file(
         }));
     }
 
-    // Insert smart tags if enabled
-    if tags_enabled {
-        // Filter tags based on enabled_tag_types if configured
-        let tags = if let Some(types) = config.get("enabled_tag_types").and_then(|v| v.as_array()) {
-            let enabled_types: Vec<String> = types.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect();
-            crate::parser::LogParser::filter_smart_tags(parse_result.tags.clone(), &enabled_types)
-        } else {
-            parse_result.tags.clone()
-        };
-        if let Err(e) = pdb.db.insert_flight_tags(flight_id, &tags) {
-            log::warn!("Failed to insert tags: {}", e);
-        }
-    }
-
-    // Insert manual tags from re-imported CSV exports (always inserted regardless of smart_tags_enabled)
-    for manual_tag in &parse_result.manual_tags {
-        if let Err(e) = pdb.db.add_flight_tag(flight_id, manual_tag) {
-            log::warn!("Failed to insert manual tag '{}': {}", manual_tag, e);
-        }
-    }
-
-    // Auto-tag with profile name for non-default profiles
-    if pdb.profile != "default" {
-        if let Err(e) = pdb.db.add_flight_tag(flight_id, &pdb.profile) {
-            log::warn!("Failed to insert profile tag '{}': {}", pdb.profile, e);
-        }
-    }
-
-    // Insert notes from re-imported CSV exports
-    if let Some(ref notes) = parse_result.notes {
-        if let Err(e) = pdb.db.update_flight_notes(flight_id, Some(notes.as_str())) {
-            log::warn!("Failed to insert notes: {}", e);
-        }
-    }
-
-    // Apply color from re-imported CSV exports
-    if let Some(ref color) = parse_result.color {
-        if let Err(e) = pdb.db.update_flight_color(flight_id, color) {
-            log::warn!("Failed to set color: {}", e);
-        }
-    }
-
-    // Insert app messages (tips and warnings) from DJI logs
-    if !parse_result.messages.is_empty() {
-        if let Err(e) = pdb.db.insert_flight_messages(flight_id, &parse_result.messages) {
-            log::warn!("Failed to insert messages: {}", e);
-        }
-    }
+    // Run all post-import steps (smart tags, manual tags, profile tags,
+    // notes, color, messages, and customization restore)
+    let config = crate::models::load_profile_config(&pdb.config_path());
+    crate::parser::run_post_import_steps(&pdb.db, flight_id, &parse_result, &config, &pdb.profile);
 
     Ok(Json(SyncFileResponse {
         success: true,
@@ -1964,15 +1759,7 @@ async fn sync_from_folder(
 
     // Check smart tags setting
     let config_path = pdb.config_path();
-    let config: serde_json::Value = if config_path.exists() {
-        std::fs::read_to_string(&config_path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or(serde_json::json!({}))
-    } else {
-        serde_json::json!({})
-    };
-    let tags_enabled = config.get("smart_tags_enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+    let config = crate::models::load_profile_config(&config_path);
     let apply_cooldown = should_apply_sync_cooldown(&config_path);
 
     for (index, file_path) in log_files.iter().enumerate() {
@@ -2028,56 +1815,9 @@ async fn sync_from_folder(
             continue;
         }
 
-        // Insert smart tags if enabled
-        if tags_enabled {
-            // Filter tags based on enabled_tag_types if configured
-            let tags = if let Some(types) = config.get("enabled_tag_types").and_then(|v| v.as_array()) {
-                let enabled_types: Vec<String> = types.iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect();
-                crate::parser::LogParser::filter_smart_tags(parse_result.tags.clone(), &enabled_types)
-            } else {
-                parse_result.tags.clone()
-            };
-            if let Err(e) = pdb.db.insert_flight_tags(flight_id, &tags) {
-                log::warn!("Failed to insert tags for {}: {}", file_name, e);
-            }
-        }
-
-        // Insert manual tags from re-imported CSV exports (always inserted regardless of smart_tags_enabled)
-        for manual_tag in &parse_result.manual_tags {
-            if let Err(e) = pdb.db.add_flight_tag(flight_id, manual_tag) {
-                log::warn!("Failed to insert manual tag '{}' for {}: {}", manual_tag, file_name, e);
-            }
-        }
-
-        // Auto-tag with profile name for non-default profiles
-        if pdb.profile != "default" {
-            if let Err(e) = pdb.db.add_flight_tag(flight_id, &pdb.profile) {
-                log::warn!("Failed to insert profile tag '{}' for {}: {}", pdb.profile, file_name, e);
-            }
-        }
-
-        // Insert notes from re-imported CSV exports
-        if let Some(ref notes) = parse_result.notes {
-            if let Err(e) = pdb.db.update_flight_notes(flight_id, Some(notes.as_str())) {
-                log::warn!("Failed to insert notes for {}: {}", file_name, e);
-            }
-        }
-
-        // Apply color from re-imported CSV exports
-        if let Some(ref color) = parse_result.color {
-            if let Err(e) = pdb.db.update_flight_color(flight_id, color) {
-                log::warn!("Failed to set color for {}: {}", file_name, e);
-            }
-        }
-
-        // Insert app messages (tips and warnings) from DJI logs
-        if !parse_result.messages.is_empty() {
-            if let Err(e) = pdb.db.insert_flight_messages(flight_id, &parse_result.messages) {
-                log::warn!("Failed to insert messages for {}: {}", file_name, e);
-            }
-        }
+        // Run all post-import steps (smart tags, manual tags, profile tags,
+        // notes, color, messages, and customization restore)
+        crate::parser::run_post_import_steps(&pdb.db, flight_id, &parse_result, &config, &pdb.profile);
 
         processed += 1;
         log::debug!("Synced: {}", file_name);
@@ -2874,15 +2614,7 @@ async fn run_scheduled_sync(state: &WebAppState) -> Result<(usize, usize, usize)
 
         // Load per-profile smart tags config
         let config_path = database::config_path_for_profile(&state.data_dir, profile);
-        let config: serde_json::Value = if config_path.exists() {
-            std::fs::read_to_string(&config_path)
-                .ok()
-                .and_then(|s| serde_json::from_str(&s).ok())
-                .unwrap_or(serde_json::json!({}))
-        } else {
-            serde_json::json!({})
-        };
-        let tags_enabled = config.get("smart_tags_enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+        let config = crate::models::load_profile_config(&config_path);
         let apply_cooldown = should_apply_sync_cooldown(&config_path);
 
         for (index, file_path) in new_log_files.iter().enumerate() {
@@ -2929,55 +2661,9 @@ async fn run_scheduled_sync(state: &WebAppState) -> Result<(usize, usize, usize)
                 continue;
             }
 
-            // Insert smart tags if enabled
-            if tags_enabled {
-                let tags = if let Some(types) = config.get("enabled_tag_types").and_then(|v| v.as_array()) {
-                    let enabled_types: Vec<String> = types.iter()
-                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                        .collect();
-                    crate::parser::LogParser::filter_smart_tags(parse_result.tags.clone(), &enabled_types)
-                } else {
-                    parse_result.tags.clone()
-                };
-                if let Err(e) = db.insert_flight_tags(flight_id, &tags) {
-                    log::warn!("[SYNC][SCHEDULED][{}] Failed to insert tags for {}: {}", profile, file_name, e);
-                }
-            }
-
-            // Insert manual tags from re-imported CSV exports
-            for manual_tag in &parse_result.manual_tags {
-                if let Err(e) = db.add_flight_tag(flight_id, manual_tag) {
-                    log::warn!("[SYNC][SCHEDULED][{}] Failed to insert manual tag '{}' for {}: {}", profile, manual_tag, file_name, e);
-                }
-            }
-
-            // Auto-tag with profile name for non-default profiles
-            if profile != "default" {
-                if let Err(e) = db.add_flight_tag(flight_id, profile) {
-                    log::warn!("[SYNC][SCHEDULED][{}] Failed to insert profile tag for {}: {}", profile, file_name, e);
-                }
-            }
-
-            // Insert notes from re-imported CSV exports
-            if let Some(ref notes) = parse_result.notes {
-                if let Err(e) = db.update_flight_notes(flight_id, Some(notes.as_str())) {
-                    log::warn!("[SYNC][SCHEDULED][{}] Failed to insert notes for {}: {}", profile, file_name, e);
-                }
-            }
-
-            // Apply color from re-imported CSV exports
-            if let Some(ref color) = parse_result.color {
-                if let Err(e) = db.update_flight_color(flight_id, color) {
-                    log::warn!("[SYNC][SCHEDULED][{}] Failed to set color for {}: {}", profile, file_name, e);
-                }
-            }
-
-            // Insert app messages (tips and warnings) from DJI logs
-            if !parse_result.messages.is_empty() {
-                if let Err(e) = db.insert_flight_messages(flight_id, &parse_result.messages) {
-                    log::warn!("[SYNC][SCHEDULED][{}] Failed to insert messages for {}: {}", profile, file_name, e);
-                }
-            }
+            // Run all post-import steps (smart tags, manual tags, profile tags,
+            // notes, color, messages, and customization restore)
+            crate::parser::run_post_import_steps(&db, flight_id, &parse_result, &config, profile);
 
             total_processed += 1;
             log::debug!("[SYNC][SCHEDULED][{}] Imported {}", profile, file_name);

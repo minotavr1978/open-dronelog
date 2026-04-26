@@ -233,14 +233,7 @@
 
         // Load config early for keep_uploaded_files setting
         let config_path = state.config_path();
-        let config: serde_json::Value = if config_path.exists() {
-            std::fs::read_to_string(&config_path)
-                .ok()
-                .and_then(|s| serde_json::from_str(&s).ok())
-                .unwrap_or(serde_json::json!({}))
-        } else {
-            serde_json::json!({})
-        };
+        let config = crate::models::load_profile_config(&config_path);
         let keep_enabled = config.get("keep_uploaded_files").and_then(|v| v.as_bool()).unwrap_or(true);
         let default_folder = state.default_upload_folder();
         let upload_folder = config.get("uploaded_files_path")
@@ -329,77 +322,12 @@
             }
         };
 
-        // Insert smart tags if the feature is enabled
+        // Run all post-import steps (smart tags, manual tags, profile tags,
+        // notes, color, messages, and customization restore)
         let config_path = state.config_path();
-        let config: serde_json::Value = if config_path.exists() {
-            std::fs::read_to_string(&config_path)
-                .ok()
-                .and_then(|s| serde_json::from_str(&s).ok())
-                .unwrap_or(serde_json::json!({}))
-        } else {
-            serde_json::json!({})
-        };
-        let tags_enabled = config.get("smart_tags_enabled").and_then(|v| v.as_bool()).unwrap_or(true);
-        
-        if tags_enabled {
-            // Filter tags based on enabled_tag_types if configured
-            let tags = if let Some(types) = config.get("enabled_tag_types").and_then(|v| v.as_array()) {
-                let enabled_types: Vec<String> = types.iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect();
-                crate::parser::LogParser::filter_smart_tags(parse_result.tags.clone(), &enabled_types)
-            } else {
-                parse_result.tags.clone()
-            };
-            if let Err(e) = db.insert_flight_tags(flight_id, &tags) {
-                log::warn!("Failed to insert tags for flight {}: {}", flight_id, e);
-            }
-        }
-
-        // Insert manual tags from re-imported CSV exports (always inserted regardless of smart_tags_enabled)
-        for manual_tag in &parse_result.manual_tags {
-            if let Err(e) = db.add_flight_tag(flight_id, manual_tag) {
-                log::warn!("Failed to insert manual tag '{}' for flight {}: {}", manual_tag, flight_id, e);
-            }
-        }
-
-        // Auto-tag with profile name for non-default profiles
-        {
-            let profile = database::get_active_profile(&state.data_dir);
-            if profile != "default" {
-                if let Err(e) = db.add_flight_tag(flight_id, &profile) {
-                    log::warn!("Failed to insert profile tag '{}' for flight {}: {}", profile, flight_id, e);
-                }
-            }
-        }
-
-        // Insert notes from re-imported CSV exports
-        if let Some(ref notes) = parse_result.notes {
-            if let Err(e) = db.update_flight_notes(flight_id, Some(notes.as_str())) {
-                log::warn!("Failed to insert notes for flight {}: {}", flight_id, e);
-            }
-        }
-
-        // Apply color from re-imported CSV exports
-        if let Some(ref color) = parse_result.color {
-            if let Err(e) = db.update_flight_color(flight_id, color) {
-                log::warn!("Failed to set color for flight {}: {}", flight_id, e);
-            }
-        }
-
-        // Insert app messages (tips and warnings) from DJI logs
-        if !parse_result.messages.is_empty() {
-            if let Err(e) = db.insert_flight_messages(flight_id, &parse_result.messages) {
-                log::warn!("Failed to insert messages for flight {}: {}", flight_id, e);
-            }
-        }
-
-        // Restore any previously saved user customizations (display_name, notes, color, manual tags)
-        if let Some(ref hash) = parse_result.metadata.file_hash {
-            if let Err(e) = db.apply_saved_customizations(flight_id, hash) {
-                log::warn!("Failed to restore customizations for flight {}: {}", flight_id, e);
-            }
-        }
+        let config = crate::models::load_profile_config(&config_path);
+        let profile = database::get_active_profile(&state.data_dir);
+        crate::parser::run_post_import_steps(&db, flight_id, &parse_result, &config, &profile);
 
         log::info!(
             "Successfully imported flight {} with {} points in {:.1}s",
@@ -1055,46 +983,26 @@
 
     #[tauri::command]
     pub async fn get_smart_tags_enabled(state: State<'_, AppState>) -> Result<bool, String> {
-        let config_path = state.config_path();
-        if config_path.exists() {
-            let content = std::fs::read_to_string(&config_path)
-                .map_err(|e| format!("Failed to read config: {}", e))?;
-            let val: serde_json::Value = serde_json::from_str(&content)
-                .map_err(|e| format!("Failed to parse config: {}", e))?;
-            Ok(val.get("smart_tags_enabled").and_then(|v| v.as_bool()).unwrap_or(true))
-        } else {
-            Ok(true)
-        }
+        let config = crate::models::load_profile_config(&state.config_path());
+        Ok(config.get("smart_tags_enabled").and_then(|v| v.as_bool()).unwrap_or(true))
     }
 
     #[tauri::command]
     pub async fn set_smart_tags_enabled(enabled: bool, state: State<'_, AppState>) -> Result<bool, String> {
         let config_path = state.config_path();
-        let mut config: serde_json::Value = if config_path.exists() {
-            let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-            serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
-        } else {
-            serde_json::json!({})
-        };
+        let mut config = crate::models::load_profile_config(&config_path);
         config["smart_tags_enabled"] = serde_json::json!(enabled);
-        std::fs::write(&config_path, serde_json::to_string_pretty(&config).unwrap())
-            .map_err(|e| format!("Failed to write config: {}", e))?;
+        crate::models::save_profile_config(&config_path, &config)?;
         Ok(enabled)
     }
 
     #[tauri::command]
     pub async fn get_enabled_tag_types(state: State<'_, AppState>) -> Result<Vec<String>, String> {
-        let config_path = state.config_path();
-        if config_path.exists() {
-            let content = std::fs::read_to_string(&config_path)
-                .map_err(|e| format!("Failed to read config: {}", e))?;
-            let val: serde_json::Value = serde_json::from_str(&content)
-                .map_err(|e| format!("Failed to parse config: {}", e))?;
-            if let Some(types) = val.get("enabled_tag_types").and_then(|v| v.as_array()) {
-                return Ok(types.iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect());
-            }
+        let config = crate::models::load_profile_config(&state.config_path());
+        if let Some(types) = config.get("enabled_tag_types").and_then(|v| v.as_array()) {
+            return Ok(types.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect());
         }
         // Default: return all tag types
         Ok(vec![
@@ -1109,15 +1017,9 @@
     #[tauri::command]
     pub async fn set_enabled_tag_types(types: Vec<String>, state: State<'_, AppState>) -> Result<Vec<String>, String> {
         let config_path = state.config_path();
-        let mut config: serde_json::Value = if config_path.exists() {
-            let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-            serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
-        } else {
-            serde_json::json!({})
-        };
+        let mut config = crate::models::load_profile_config(&config_path);
         config["enabled_tag_types"] = serde_json::json!(types.clone());
-        std::fs::write(&config_path, serde_json::to_string_pretty(&config).unwrap())
-            .map_err(|e| format!("Failed to write config: {}", e))?;
+        crate::models::save_profile_config(&config_path, &config)?;
         Ok(types)
     }
 
@@ -1165,25 +1067,14 @@
 
     #[tauri::command]
     pub async fn get_keep_upload_settings(state: State<'_, AppState>) -> Result<KeepUploadSettings, String> {
-        let config_path = state.config_path();
         let default_folder = state.default_upload_folder().to_string_lossy().to_string();
-        
-        if config_path.exists() {
-            let content = std::fs::read_to_string(&config_path)
-                .map_err(|e| format!("Failed to read config: {}", e))?;
-            let val: serde_json::Value = serde_json::from_str(&content)
-                .map_err(|e| format!("Failed to parse config: {}", e))?;
-            
-            let enabled = val.get("keep_uploaded_files").and_then(|v| v.as_bool()).unwrap_or(true);
-            let folder_path = val.get("uploaded_files_path")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string())
-                .unwrap_or(default_folder);
-            
-            Ok(KeepUploadSettings { enabled, folder_path })
-        } else {
-            Ok(KeepUploadSettings { enabled: true, folder_path: default_folder })
-        }
+        let config = crate::models::load_profile_config(&state.config_path());
+        let enabled = config.get("keep_uploaded_files").and_then(|v| v.as_bool()).unwrap_or(true);
+        let folder_path = config.get("uploaded_files_path")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .unwrap_or(default_folder);
+        Ok(KeepUploadSettings { enabled, folder_path })
     }
 
     #[tauri::command]
@@ -1202,48 +1093,25 @@
             })?;
         }
         
-        let mut config: serde_json::Value = if config_path.exists() {
-            let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-            serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
-        } else {
-            serde_json::json!({})
-        };
-        
+        let mut config = crate::models::load_profile_config(&config_path);
         config["keep_uploaded_files"] = serde_json::json!(enabled);
         config["uploaded_files_path"] = serde_json::json!(actual_folder.clone());
-        
-        std::fs::write(&config_path, serde_json::to_string_pretty(&config).unwrap())
-            .map_err(|e| format!("Failed to write config: {}", e))?;
-        
+        crate::models::save_profile_config(&config_path, &config)?;
         Ok(KeepUploadSettings { enabled, folder_path: actual_folder })
     }
 
     #[tauri::command]
     pub async fn get_auto_logout(state: State<'_, AppState>) -> Result<bool, String> {
-        let config_path = state.config_path();
-        if config_path.exists() {
-            let content = std::fs::read_to_string(&config_path)
-                .map_err(|e| format!("Failed to read config: {}", e))?;
-            let val: serde_json::Value = serde_json::from_str(&content)
-                .map_err(|e| format!("Failed to parse config: {}", e))?;
-            Ok(val.get("auto_logout").and_then(|v| v.as_bool()).unwrap_or(false))
-        } else {
-            Ok(false)
-        }
+        let config = crate::models::load_profile_config(&state.config_path());
+        Ok(config.get("auto_logout").and_then(|v| v.as_bool()).unwrap_or(false))
     }
 
     #[tauri::command]
     pub async fn set_auto_logout(enabled: bool, state: State<'_, AppState>) -> Result<bool, String> {
         let config_path = state.config_path();
-        let mut config: serde_json::Value = if config_path.exists() {
-            let content = std::fs::read_to_string(&config_path).unwrap_or_default();
-            serde_json::from_str(&content).unwrap_or(serde_json::json!({}))
-        } else {
-            serde_json::json!({})
-        };
+        let mut config = crate::models::load_profile_config(&config_path);
         config["auto_logout"] = serde_json::json!(enabled);
-        std::fs::write(&config_path, serde_json::to_string_pretty(&config).unwrap())
-            .map_err(|e| format!("Failed to write config: {}", e))?;
+        crate::models::save_profile_config(&config_path, &config)?;
         Ok(enabled)
     }
 
@@ -1322,36 +1190,7 @@
         let flight = db.get_flight_by_id(flight_id)
             .map_err(|e| format!("Failed to get flight {}: {}", flight_id, e))?;
 
-        let metadata = crate::models::FlightMetadata {
-            id: flight.id,
-            file_name: flight.file_name.clone(),
-            display_name: flight.display_name.clone(),
-            file_hash: None,
-            drone_model: flight.drone_model.clone(),
-            drone_serial: flight.drone_serial.clone(),
-            aircraft_name: flight.aircraft_name.clone(),
-            battery_serial: flight.battery_serial.clone(),
-            cycle_count: flight.cycle_count,
-            rc_serial: flight.rc_serial.clone(),
-            battery_life: flight.battery_life,
-            start_time: flight.start_time.as_deref()
-                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                .map(|dt| dt.with_timezone(&chrono::Utc))
-                .or_else(|| flight.start_time.as_deref()
-                    .and_then(|s| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S").ok()
-                        .or_else(|| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f").ok()))
-                    .map(|ndt| ndt.and_utc())),
-            end_time: None,
-            duration_secs: flight.duration_secs,
-            total_distance: flight.total_distance,
-            max_altitude: flight.max_altitude,
-            max_speed: flight.max_speed,
-            home_lat: flight.home_lat,
-            home_lon: flight.home_lon,
-            point_count: flight.point_count.unwrap_or(0),
-            photo_count: flight.photo_count.unwrap_or(0),
-            video_count: flight.video_count.unwrap_or(0),
-        };
+        let metadata = crate::models::FlightMetadata::from(&flight);
 
         match db.get_flight_telemetry(flight_id, Some(50000), None) {
             Ok(records) if !records.is_empty() => {
@@ -1393,37 +1232,7 @@
         for flight_id in &flight_ids {
             match db.get_flight_by_id(*flight_id) {
                 Ok(flight) => {
-                    // Build FlightMetadata from the Flight record
-                    let metadata = crate::models::FlightMetadata {
-                        id: flight.id,
-                        file_name: flight.file_name.clone(),
-                        display_name: flight.display_name.clone(),
-                        file_hash: None,
-                        drone_model: flight.drone_model.clone(),
-                        drone_serial: flight.drone_serial.clone(),
-                        aircraft_name: flight.aircraft_name.clone(),
-                        battery_serial: flight.battery_serial.clone(),
-                        cycle_count: flight.cycle_count,
-                        rc_serial: flight.rc_serial.clone(),
-                        battery_life: flight.battery_life,
-                        start_time: flight.start_time.as_deref()
-                            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                            .map(|dt| dt.with_timezone(&chrono::Utc))
-                            .or_else(|| flight.start_time.as_deref()
-                                .and_then(|s| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S").ok()
-                                    .or_else(|| chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f").ok()))
-                                .map(|ndt| ndt.and_utc())),
-                        end_time: None,
-                        duration_secs: flight.duration_secs,
-                        total_distance: flight.total_distance,
-                        max_altitude: flight.max_altitude,
-                        max_speed: flight.max_speed,
-                        home_lat: flight.home_lat,
-                        home_lon: flight.home_lon,
-                        point_count: flight.point_count.unwrap_or(0),
-                        photo_count: flight.photo_count.unwrap_or(0),
-                        video_count: flight.video_count.unwrap_or(0),
-                    };
+                    let metadata = crate::models::FlightMetadata::from(&flight);
 
                     // Get raw telemetry to compute stats
                     match db.get_flight_telemetry(*flight_id, Some(50000), None) {
@@ -1836,15 +1645,8 @@
                 let has_password = profile_auth::has_password(&data_dir, &profile);
                 let auto_logout = if has_password {
                     let config_path = database::config_path_for_profile(&data_dir, &profile);
-                    if config_path.exists() {
-                        std::fs::read_to_string(&config_path)
-                            .ok()
-                            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-                            .and_then(|v| v.get("auto_logout").and_then(|b| b.as_bool()))
-                            .unwrap_or(false)
-                    } else {
-                        false
-                    }
+                    let config = crate::models::load_profile_config(&config_path);
+                    config.get("auto_logout").and_then(|b| b.as_bool()).unwrap_or(false)
                 } else {
                     false
                 };

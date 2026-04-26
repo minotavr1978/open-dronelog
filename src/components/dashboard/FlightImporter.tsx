@@ -1577,7 +1577,7 @@ export function FlightImporter() {
               </svg>
               <span className="font-medium text-amber-300/90">Tip:</span>
               <span>
-                Use{' '}
+                {' '}
                 <a
                   href={litchiHubBridgeUrl}
                   target="_blank"
@@ -1586,7 +1586,7 @@ export function FlightImporter() {
                 >
                   Litchi Hub Bridge
                 </a>{' '}
-                to sync logs automatically.
+                 sync logs automatically.
               </span>
             </div>
           )}

@@ -3,7 +3,7 @@
   "sourceFingerprints": {
     "packageJson": "b15d687c0a7e16be3e1a0154630334b24a9db6ba40d443cbc0bee48eb0107d2b",
     "cargoToml": "e6299bd31c108ff50395f7fbf6d02a80228874cf9dccc3529af386f9ae0426e1",
-    "serverRs": "7f2f33413fdde30411ade5dd6eb89050d9743679e01544b9b3bedc6f83cb3ba2",
+    "serverRs": "d5e6ea92258779cee4515a28b63e28be7257d175abbf434f0a41634e77bbfedd",
     "apiTs": "04a22558012248f8f271e0bfa8f4f504ed72e88d1be56a78b7aa738dc6ffd867",
     "databaseRs": "23f5f413664257317790abb87de765e3aa6620349f3b18e480920de6f5629bd0",
     "readmeEnvVars": "0af4b86231dd66eadf0a5938a45d5a892377bc2a5f139ed9aee1aa4215371a64",

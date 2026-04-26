@@ -556,3 +556,91 @@ pub struct FlightStats {
     pub end_battery_percent: Option<i32>,
     pub start_battery_temp: Option<f64>,
 }
+
+// ============================================================================
+// Conversion helpers
+// ============================================================================
+
+/// Parse a start_time string (as stored in the Flight DB record) into a
+/// `DateTime<Utc>`.  Tries RFC 3339 first, then falls back to common
+/// NaiveDateTime formats.
+pub fn parse_flight_start_time(s: Option<&str>) -> Option<DateTime<Utc>> {
+    let s = s?;
+    // Try RFC 3339 (e.g. "2024-06-15T14:30:00Z")
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+        return Some(dt.with_timezone(&Utc));
+    }
+    // Try NaiveDateTime formats coming from the database
+    if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
+        return Some(ndt.and_utc());
+    }
+    if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f") {
+        return Some(ndt.and_utc());
+    }
+    None
+}
+
+/// Build a `FlightMetadata` from a persisted `Flight` record.
+/// Used by smart-tag regeneration endpoints to avoid duplicating the
+/// conversion logic.
+impl From<&Flight> for FlightMetadata {
+    fn from(flight: &Flight) -> Self {
+        FlightMetadata {
+            id: flight.id,
+            file_name: flight.file_name.clone(),
+            display_name: flight.display_name.clone(),
+            file_hash: None,
+            drone_model: flight.drone_model.clone(),
+            drone_serial: flight.drone_serial.clone(),
+            aircraft_name: flight.aircraft_name.clone(),
+            battery_serial: flight.battery_serial.clone(),
+            cycle_count: flight.cycle_count,
+            rc_serial: flight.rc_serial.clone(),
+            battery_life: flight.battery_life,
+            start_time: parse_flight_start_time(flight.start_time.as_deref()),
+            end_time: None,
+            duration_secs: flight.duration_secs,
+            total_distance: flight.total_distance,
+            max_altitude: flight.max_altitude,
+            max_speed: flight.max_speed,
+            home_lat: flight.home_lat,
+            home_lon: flight.home_lon,
+            point_count: flight.point_count.unwrap_or(0),
+            photo_count: flight.photo_count.unwrap_or(0),
+            video_count: flight.video_count.unwrap_or(0),
+        }
+    }
+}
+
+// ============================================================================
+// Profile config helpers
+// ============================================================================
+
+/// Load a profile's JSON config file, returning an empty object if the file
+/// does not exist or cannot be parsed.
+pub fn load_profile_config(config_path: &std::path::Path) -> serde_json::Value {
+    if config_path.exists() {
+        match std::fs::read_to_string(config_path) {
+            Ok(content) => match serde_json::from_str(&content) {
+                Ok(config) => config,
+                Err(e) => {
+                    log::warn!(
+                        "Malformed profile config at {}: {}. Falling back to empty config.",
+                        config_path.display(),
+                        e
+                    );
+                    serde_json::json!({})
+                }
+            },
+            Err(_) => serde_json::json!({}),
+        }
+    } else {
+        serde_json::json!({})
+    }
+}
+
+/// Persist a profile's JSON config, creating parent directories if needed.
+pub fn save_profile_config(config_path: &std::path::Path, config: &serde_json::Value) -> Result<(), String> {
+    std::fs::write(config_path, serde_json::to_string_pretty(config).unwrap())
+        .map_err(|e| format!("Failed to write config: {}", e))
+}
