@@ -42,16 +42,15 @@ jobs:
       - name: Init Android
         run: npx tauri android init
 
-      - name: Restore keystore
+            - name: Setup Android signing
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > src-tauri/gen/android/app/open-dronelog-release.jks
+          cd src-tauri/gen/android
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
+          echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > $RUNNER_TEMP/open-dronelog-release.jks
+          echo "storeFile=$RUNNER_TEMP/open-dronelog-release.jks" >> keystore.properties
 
       - name: Build signed APK
-        env:
-          TAURI_ANDROID_SIGNING_KEY_PATH: open-dronelog-release.jks
-          TAURI_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          TAURI_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          TAURI_ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: npx tauri android build
 
       - name: Collect APKs
