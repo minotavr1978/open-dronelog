@@ -806,6 +806,74 @@ impl<'a> LogParser<'a> {
         }
     }
 
+    async fn fetch_keychains_reqwest(&self, parser: &DJILog, api_key: &str, department_override: Option<Department>) -> Result<Vec<Vec<dji_log_parser::keychain::KeychainFeaturePoint>>, ParserError> {
+        let request = if let Some(dept) = department_override {
+            log::debug!("Creating keychain request with department override: {:?}", dept);
+            parser.keychains_request_with_custom_params(Some(dept), None)
+                .map_err(|e| ParserError::Api(format!("Failed to create keychain request: {}", e)))?
+        } else {
+            log::debug!("Creating standard keychain request");
+            parser.keychains_request()
+                .map_err(|e| ParserError::Api(format!("Failed to create keychain request: {}", e)))?
+        };
+
+        // reqwest::Client automatically honors HTTP_PROXY and HTTPS_PROXY environment variables
+        log::debug!("Building reqwest client for keychain fetch (honors HTTP_PROXY/HTTPS_PROXY)");
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()
+            .map_err(|e| ParserError::Api(format!("Failed to build HTTP client: {}", e)))?;
+
+        let endpoint = "https://dev.dji.com/openapi/v1/flight-records/keychains";
+
+        log::debug!("Connecting to keychain API endpoint: {}", endpoint);
+        let response = client.post(endpoint)
+            .header("Content-Type", "application/json")
+            .header("Api-Key", api_key)
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| {
+                log::debug!("Keychain API network request failed: {}", e);
+                ParserError::Api(format!("Network request failed: {}", e))
+            })?;
+
+        log::debug!("Received response from keychain API: HTTP {}", response.status());
+
+        if !response.status().is_success() {
+            if response.status() == 403 {
+                log::debug!("Keychain API rejected request: Invalid API Key");
+                return Err(ParserError::Api("Invalid API Key".to_string()));
+            }
+            log::debug!("Keychain API rejected request: HTTP {}", response.status());
+            return Err(ParserError::Api(format!("API returned status {}", response.status())));
+        }
+
+        log::debug!("Parsing keychain response JSON");
+        let keychains_response: dji_log_parser::keychain::KeychainsResponse = response.json().await
+            .map_err(|e| {
+                log::debug!("Failed to parse keychain response JSON: {}", e);
+                ParserError::Api(format!("Failed to parse response: {}", e))
+            })?;
+
+        log::debug!("Keychain API result code: {}", keychains_response.result.code);
+
+        if keychains_response.result.code != 0 {
+            Err(ParserError::Api(keychains_response.result.msg))
+        } else {
+            match keychains_response.data {
+                Some(data) => {
+                    log::debug!("Successfully parsed keychain payload");
+                    Ok(data)
+                },
+                None => {
+                    log::debug!("Keychain response was OK but missing data payload");
+                    Err(ParserError::Api("Missing keychain data".to_owned()))
+                },
+            }
+        }
+    }
+
     /// Get frames from the parser, handling encryption if needed.
     /// Runs the CPU-bound parsing in spawn_blocking with catch_unwind
     /// to prevent panics from crashing the application.
@@ -817,7 +885,7 @@ impl<'a> LogParser<'a> {
             let api_key = self.api.get_api_key().ok_or(ParserError::EncryptionKeyRequired)?;
             
             // Try standard keychain fetch first
-            match parser.fetch_keychains(&api_key) {
+            match self.fetch_keychains_reqwest(parser, &api_key, None).await {
                 Ok(kc) => (Some(kc), false),
                 Err(e) => {
                     // Standard fetch failed — try fallback for third-party apps (Dronelink, DroneDeploy)
@@ -828,11 +896,7 @@ impl<'a> LogParser<'a> {
                         e
                     );
                     
-                    let request = parser
-                        .keychains_request_with_custom_params(Some(Department::DJIFly), None)
-                        .map_err(|e| ParserError::Api(format!("Failed to create keychain request: {}", e)))?;
-                    
-                    let kc = request.fetch(&api_key, None).map_err(|e| {
+                    let kc = self.fetch_keychains_reqwest(parser, &api_key, Some(Department::DJIFly)).await.map_err(|e| {
                         ParserError::Api(format!("Keychain fetch failed (both standard and DJIFly fallback): {}", e))
                     })?;
                     
