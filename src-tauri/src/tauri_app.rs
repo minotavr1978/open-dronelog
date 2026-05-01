@@ -361,8 +361,9 @@
             .unwrap_or("import.log");
 
         // Keep the original file name so default flight names are preserved.
-        // Use a unique temp subdirectory to avoid collisions.
-        let temp_dir = std::env::temp_dir().join(format!("odl_mobile_import_{}", uuid::Uuid::new_v4()));
+        // Use a unique temp subdirectory within the app's data directory to avoid collisions
+        // and bypass OS restrictions on the global temp folder on customized Android devices like DJI RC Pro.
+        let temp_dir = state.data_dir.join("temp").join(format!("odl_mobile_import_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir)
             .map_err(|e| format!("Failed to create import staging directory: {}", e))?;
         let temp_path = temp_dir.join(safe_name);
@@ -880,7 +881,10 @@
 
     #[tauri::command]
     pub async fn export_backup_bytes(app: AppHandle, state: State<'_, AppState>) -> Result<Vec<u8>, String> {
-        let temp_path = std::env::temp_dir().join(format!(
+        let temp_dir = state.data_dir.join("temp");
+        std::fs::create_dir_all(&temp_dir)
+            .map_err(|e| format!("Failed to create temp directory: {}", e))?;
+        let temp_path = temp_dir.join(format!(
             "open-dronelog-backup-{}.backup",
             uuid::Uuid::new_v4()
         ));
@@ -919,7 +923,10 @@
 
     #[tauri::command]
     pub async fn import_backup_bytes(data: Vec<u8>, app: AppHandle, state: State<'_, AppState>) -> Result<String, String> {
-        let temp_path = std::env::temp_dir().join(format!(
+        let temp_dir = state.data_dir.join("temp");
+        std::fs::create_dir_all(&temp_dir)
+            .map_err(|e| format!("Failed to create temp directory: {}", e))?;
+        let temp_path = temp_dir.join(format!(
             "open-dronelog-restore-{}.backup",
             uuid::Uuid::new_v4()
         ));
