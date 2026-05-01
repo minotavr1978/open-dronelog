@@ -136,11 +136,11 @@ export function HtmlReportModal({ isOpen, onClose, onGenerate, flightCount }: Ht
 
     return createPortal(
         <div
-            className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-[9998] flex flex-col items-center p-4 overflow-y-auto bg-black/50 backdrop-blur-sm"
             onClick={onClose}
         >
             <div
-                className="bg-drone-secondary border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col modal-mobile-max"
+                className="bg-drone-secondary border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col modal-mobile-max my-auto"
                 style={{ maxHeight: '85vh' }}
                 onClick={(e) => e.stopPropagation()}
             >

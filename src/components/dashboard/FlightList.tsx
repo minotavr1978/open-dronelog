@@ -4683,14 +4683,14 @@ export function FlightList({
       {/* Notes Modal */}
       {notesModalFlightId !== null && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex flex-col items-center p-4 overflow-y-auto bg-black/50 backdrop-blur-sm"
           onClick={() => {
             setNotesModalFlightId(null);
             setNotesInput('');
           }}
         >
           <div
-            className="bg-drone-dark rounded-xl p-5 shadow-xl border border-gray-700 w-[400px] max-w-[90vw]"
+            className="bg-drone-dark rounded-xl p-5 shadow-xl border border-gray-700 w-[400px] max-w-[90vw] my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-white font-medium mb-3 flex items-center gap-2">

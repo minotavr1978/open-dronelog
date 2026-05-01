@@ -218,8 +218,8 @@ export function FlyCardGenerator({ flight, unitPrefs, onClose }: FlyCardGenerato
   const currentBackground = backgroundImage || mapBackground;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-drone-surface border border-gray-700 rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl">
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center p-4 overflow-y-auto bg-black/70 backdrop-blur-sm">
+      <div className="bg-drone-surface border border-gray-700 rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl my-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-white">{t('flyCard.title')}</h2>

@@ -73,7 +73,7 @@ export function FlightMessagesModal({
   const tipCount = sorted.filter((m) => m.messageType === 'tip').length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-hidden mobile-safe-container">
+    <div className="fixed inset-0 z-50 flex flex-col items-center p-4 overflow-y-auto mobile-safe-container">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -84,7 +84,7 @@ export function FlightMessagesModal({
       {/* Modal panel */}
       <div
         ref={modalRef}
-        className="flight-messages-modal relative z-10 w-full max-w-lg bg-drone-dark border border-gray-700 rounded-2xl shadow-2xl flex flex-col max-h-[80vh] modal-mobile-max"
+        className="flight-messages-modal relative z-10 w-full max-w-lg bg-drone-dark border border-gray-700 rounded-2xl shadow-2xl flex flex-col max-h-[80vh] modal-mobile-max my-auto"
         role="dialog"
         aria-modal="true"
         aria-label={t('map.messages')}
@@ -166,7 +166,7 @@ export function FlightMessagesModal({
         </div>
 
         {/* Scrollable message list */}
-        <div className="overflow-y-auto flex-1 divide-y divide-gray-700/40 px-0">
+        <div className="overflow-y-auto flex-1 min-h-0 divide-y divide-gray-700/40 px-0">
           {sorted.length === 0 ? (
             <div className="flex items-center justify-center py-12 text-gray-500 text-sm">
               {t('dashboard.messagesEmpty')}
