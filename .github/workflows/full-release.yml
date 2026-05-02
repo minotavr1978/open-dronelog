@@ -136,7 +136,10 @@ jobs:
           cat src-tauri/gen/android/keystore.properties
           test -f "$RUNNER_TEMP/open-dronelog-release.jks"
 
-      - name: Build signed Android APKs
+      - name: Build universal Android APK
+        run: npx tauri android build --apk
+
+      - name: Build split Android APKs
         run: npx tauri android build --apk --split-per-abi
 
       - name: Sign APKs manually
