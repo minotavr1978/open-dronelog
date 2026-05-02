@@ -131,7 +131,7 @@ jobs:
       - name: Init Android
         run: npx tauri android init
 
-      - name: Setup Android signing
+            - name: Setup Android signing
         run: |
           cd src-tauri/gen/android
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
@@ -154,3 +154,8 @@ jobs:
           tag_name: ${{ needs.release-info.outputs.tag }}
           name: ${{ needs.release-info.outputs.name }}
           files: dist-apk/*.apk
+      - name: Check signing config
+        run: |
+          ls -lah src-tauri/gen/android
+          cat src-tauri/gen/android/keystore.properties
+          test -f "$RUNNER_TEMP/open-dronelog-release.jks"
