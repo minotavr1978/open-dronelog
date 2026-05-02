@@ -4,9 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (наприклад v3.2.3-uk)"
-        required: true
-        default: "v3.2.3-uk"
+        description: "Release tag"
+        required: false
+  push:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -62,6 +64,6 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.event.inputs.tag }}
+          tag_name: auto-${{ github.run_number }}
           name: Open DroneLog ${{ github.event.inputs.tag }}
           files: dist-apk/*.apk
