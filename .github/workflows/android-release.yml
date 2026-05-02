@@ -67,9 +67,34 @@ jobs:
           find . -name "*.apk" -exec cp {} dist-apk/ \;
           ls -lah dist-apk
 
+       - name: Generate release info
+        id: release_info
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v${VERSION}-uk-${GITHUB_RUN_NUMBER}"
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+          cat > release-notes.md <<EOF
+          # Open DroneLog Ukrainian Build
+
+          Base version: v${VERSION}
+
+          Changes:
+          - Ukrainian localization
+          - Android signed APK build
+          - Synced from upstream when available
+
+          Build:
+          - Run number: ${GITHUB_RUN_NUMBER}
+          - Commit: ${GITHUB_SHA}
+          EOF
+
       - name: Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: auto-${{ github.run_number }}
-          name: Open DroneLog ${{ github.event.inputs.tag }}
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: Open DroneLog ${{ steps.release_info.outputs.tag }}
+          body_path: release-notes.md
           files: dist-apk/*.apk
