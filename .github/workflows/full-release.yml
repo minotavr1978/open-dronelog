@@ -20,7 +20,7 @@ jobs:
         id: info
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          TAG="v${VERSION}-uk-${GITHUB_RUN_NUMBER}"
+          TAG="v${VERSION}-uk"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "name=Open DroneLog $TAG" >> "$GITHUB_OUTPUT"
 
@@ -137,12 +137,35 @@ jobs:
           test -f "$RUNNER_TEMP/open-dronelog-release.jks"
 
       - name: Build signed Android APKs
-        run: npx tauri android build
+        run: npx tauri android build --apk --split-per-abi
 
-      - name: Collect APKs
+      - name: Sign APKs manually
         run: |
           mkdir -p dist-apk
-          find . -name "*.apk" -type f -exec cp {} dist-apk/ \;
+
+          BUILD_TOOLS=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
+          echo "Build tools: $BUILD_TOOLS"
+
+          for APK in $(find . -name "*release-unsigned.apk" -type f); do
+            BASENAME=$(basename "$APK" .apk)
+            CLEAN_NAME=${BASENAME/-unsigned/}
+            echo "Signing: $APK"
+
+            "$BUILD_TOOLS/zipalign" -f -p 4 "$APK" "dist-apk/${CLEAN_NAME}-aligned.apk"
+
+            "$BUILD_TOOLS/apksigner" sign \
+              --ks "$RUNNER_TEMP/open-dronelog-release.jks" \
+              --ks-key-alias "${{ secrets.ANDROID_KEY_ALIAS }}" \
+              --ks-pass pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
+              --key-pass pass:${{ secrets.ANDROID_KEY_PASSWORD }} \
+              --out "dist-apk/OpenDroneLog-${{ needs.release-info.outputs.tag }}-${CLEAN_NAME}.apk" \
+              "dist-apk/${CLEAN_NAME}-aligned.apk"
+
+            "$BUILD_TOOLS/apksigner" verify --verbose "dist-apk/OpenDroneLog-${{ needs.release-info.outputs.tag }}-${CLEAN_NAME}.apk"
+
+            rm "dist-apk/${CLEAN_NAME}-aligned.apk"
+          done
+
           ls -lah dist-apk
 
       - name: Upload Android APKs to release
