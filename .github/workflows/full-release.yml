@@ -2,15 +2,6 @@ name: Full Release
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'src/**'
-      - 'src-tauri/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'tauri.conf.json'
 
 permissions:
   contents: write
@@ -30,11 +21,11 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           TAG="v${VERSION}-uk-${GITHUB_RUN_NUMBER}"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "name=Open DroneLog $TAG" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "name=Open DroneLog $TAG" >> "$GITHUB_OUTPUT"
 
           cat > release-notes.md <<EOF
-          # Open DroneLog Ukrainian Build
+          Open DroneLog Ukrainian Build
 
           Base version: v${VERSION}
 
@@ -96,7 +87,7 @@ jobs:
         with:
           tagName: ${{ needs.release-info.outputs.tag }}
           releaseName: ${{ needs.release-info.outputs.name }}
-          releaseBody: "Open DroneLog Ukrainian build"
+          releaseBody: Open DroneLog Ukrainian build
           releaseDraft: false
           prerelease: false
 
@@ -131,13 +122,19 @@ jobs:
       - name: Init Android
         run: npx tauri android init
 
-            - name: Setup Android signing
+      - name: Setup Android signing
         run: |
           cd src-tauri/gen/android
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
           echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > $RUNNER_TEMP/open-dronelog-release.jks
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/open-dronelog-release.jks"
           echo "storeFile=$RUNNER_TEMP/open-dronelog-release.jks" >> keystore.properties
+
+      - name: Check signing config
+        run: |
+          ls -lah src-tauri/gen/android
+          cat src-tauri/gen/android/keystore.properties
+          test -f "$RUNNER_TEMP/open-dronelog-release.jks"
 
       - name: Build signed Android APKs
         run: npx tauri android build
@@ -154,8 +151,3 @@ jobs:
           tag_name: ${{ needs.release-info.outputs.tag }}
           name: ${{ needs.release-info.outputs.name }}
           files: dist-apk/*.apk
-      - name: Check signing config
-        run: |
-          ls -lah src-tauri/gen/android
-          cat src-tauri/gen/android/keystore.properties
-          test -f "$RUNNER_TEMP/open-dronelog-release.jks"
