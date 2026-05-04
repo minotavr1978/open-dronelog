@@ -1,0 +1,100 @@
+name: Build Android Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag"
+        required: false
+
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'src-tauri/**'
+      - 'package.json'
+      - 'tauri.conf.json'
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Init Android
+        run: npx tauri android init
+
+            - name: Setup Android signing
+        run: |
+          cd src-tauri/gen/android
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
+          echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > $RUNNER_TEMP/open-dronelog-release.jks
+          echo "storeFile=$RUNNER_TEMP/open-dronelog-release.jks" >> keystore.properties
+
+      - name: Build signed APK
+        run: npx tauri android build
+
+      - name: Collect APKs
+        run: |
+          mkdir dist-apk
+          find . -name "*.apk" -exec cp {} dist-apk/ \;
+          ls -lah dist-apk
+
+       - name: Generate release info
+        id: release_info
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v${VERSION}-uk-${GITHUB_RUN_NUMBER}"
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+          cat > release-notes.md <<EOF
+          # Open DroneLog Ukrainian Build
+
+          Base version: v${VERSION}
+
+          Changes:
+          - Ukrainian localization
+          - Android signed APK build
+          - Synced from upstream when available
+
+          Build:
+          - Run number: ${GITHUB_RUN_NUMBER}
+          - Commit: ${GITHUB_SHA}
+          EOF
+
+      - name: Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: Open DroneLog ${{ steps.release_info.outputs.tag }}
+          body_path: release-notes.md
+          files: dist-apk/*.apk
