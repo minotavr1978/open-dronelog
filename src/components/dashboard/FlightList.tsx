@@ -399,6 +399,8 @@ export function FlightList({
   const [notesInput, setNotesInput] = useState('');
   // HTML Report modal state
   const [showHtmlReportModal, setShowHtmlReportModal] = useState(false);
+  // HTML Report modal state for context menu (single flight)
+  const [contextHtmlReportFlightId, setContextHtmlReportFlightId] = useState<number | null>(null);
   const dateButtonRef = useRef<HTMLButtonElement | null>(null);
   const sortButtonRef = useRef<HTMLButtonElement | null>(null);
   const sortDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -2452,6 +2454,93 @@ export function FlightList({
     }
   };
 
+  // Handle single flight HTML report export from context menu
+  const handleContextHtmlReportExport = async (config: {
+    documentTitle: string;
+    pilotName: string;
+    fieldConfig: HtmlReportFieldConfig;
+  }) => {
+    const flightId = contextHtmlReportFlightId;
+    setContextHtmlReportFlightId(null);
+    if (flightId === null) return;
+
+    const flight = flights.find(f => f.id === flightId);
+    if (!flight) return;
+
+    const baseName = sanitizeFileName(flight.displayName || flight.fileName || 'flight');
+    const now = new Date();
+    const pad2 = (n: number) => String(n).padStart(2, '0');
+    const defaultFileName = `${baseName || 'flight'}_Report_${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}_${pad2(now.getHours())}-${pad2(now.getMinutes())}-${pad2(now.getSeconds())}.html`;
+
+    try {
+      setIsExporting(true);
+      setExportProgress({ done: 0, total: 1, currentFile: `Processing ${baseName}` });
+
+      const data: FlightDataResponse = await api.getFlightData(flightId, 999999999);
+
+      // Check if any weather fields are enabled
+      const weatherFields: (keyof HtmlReportFieldConfig)[] = [
+        'temperature', 'windSpeed', 'windGusts', 'humidity',
+        'cloudCover', 'precipitation', 'pressure', 'weatherCondition',
+      ];
+      const needsWeather = weatherFields.some((f) => config.fieldConfig[f]);
+
+      let weather = null;
+      if (needsWeather) {
+        const lat = flight.homeLat ?? data.telemetry.latitude?.find((v) => v !== null) ?? null;
+        const lon = flight.homeLon ?? data.telemetry.longitude?.find((v) => v !== null) ?? null;
+        if (lat != null && lon != null && flight.startTime) {
+          try {
+            weather = await fetchFlightWeather(lat as number, lon as number, flight.startTime);
+          } catch {
+            // Weather fetch failed; leave as null
+          }
+        }
+      }
+
+      const reportData: FlightReportData[] = [{
+        flight,
+        data,
+        weather,
+        getDroneDisplayName,
+        getBatteryDisplayName,
+        getDisplaySerial,
+      }];
+
+      setExportProgress({ done: 1, total: 1, currentFile: 'Building report...' });
+
+      const htmlContent = buildHtmlReport(reportData, {
+        documentTitle: config.documentTitle,
+        pilotName: config.pilotName,
+        fieldConfig: config.fieldConfig,
+        unitPrefs,
+        locale,
+        dateLocale,
+        appLanguage,
+        timeFormat,
+        t,
+      });
+
+      if (isWebMode()) {
+        downloadFile(defaultFileName, htmlContent, 'text/html');
+      } else {
+        const saved = await api.saveTextWithDialog(defaultFileName, htmlContent, [
+          { name: 'HTML', extensions: ['html'] },
+        ]);
+        if (!saved) {
+          setIsExporting(false);
+          return;
+        }
+      }
+
+      setExportProgress({ done: 1, total: 1, currentFile: '' });
+      setTimeout(() => setIsExporting(false), 1000);
+    } catch (err) {
+      console.error('HTML report export failed:', err);
+      setIsExporting(false);
+    }
+  };
+
   // Handle regenerate smart tags for a single flight from context menu
   const handleContextRegenerateTags = async (flightId: number) => {
     setContextMenu(null);
@@ -4410,6 +4499,17 @@ export function FlightList({
                 >
                   {t('flightList.kmlRelative')}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContextMenu(null);
+                    setContextExportSubmenuOpen(false);
+                    setContextHtmlReportFlightId(contextMenu.flightId);
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-sm text-gray-300 hover:bg-gray-700/50"
+                >
+                  {t('flightList.htmlReport')}
+                </button>
               </div>
             )}
             <button
@@ -4583,14 +4683,14 @@ export function FlightList({
       {/* Notes Modal */}
       {notesModalFlightId !== null && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex flex-col items-center p-4 overflow-y-auto bg-black/50 backdrop-blur-sm"
           onClick={() => {
             setNotesModalFlightId(null);
             setNotesInput('');
           }}
         >
           <div
-            className="bg-drone-dark rounded-xl p-5 shadow-xl border border-gray-700 w-[400px] max-w-[90vw]"
+            className="bg-drone-dark rounded-xl p-5 shadow-xl border border-gray-700 w-[400px] max-w-[90vw] my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-white font-medium mb-3 flex items-center gap-2">
@@ -4630,12 +4730,20 @@ export function FlightList({
         </div>
       )}
 
-      {/* HTML Report Modal */}
+      {/* HTML Report Modal (bulk / export filtered) */}
       <HtmlReportModal
         isOpen={showHtmlReportModal}
         onClose={() => setShowHtmlReportModal(false)}
         onGenerate={handleHtmlReportExport}
         flightCount={filteredFlights.length}
+      />
+
+      {/* HTML Report Modal (context menu single flight) */}
+      <HtmlReportModal
+        isOpen={contextHtmlReportFlightId !== null}
+        onClose={() => setContextHtmlReportFlightId(null)}
+        onGenerate={handleContextHtmlReportExport}
+        flightCount={1}
       />
     </div>
   );

@@ -9,6 +9,7 @@ import { isWebMode, downloadFile, getFlightData, saveTextWithDialog } from '@/li
 import { buildCsv, buildJson, buildGpx, buildKml, buildKmlRelative } from '@/lib/exportUtils';
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { WeatherModal } from './WeatherModal';
+import { HtmlReportModal } from './HtmlReportModal';
 import weatherIcon from '@/assets/weather-icon.svg';
 import {
   formatDuration,
@@ -20,6 +21,8 @@ import {
 } from '@/lib/utils';
 import { useFlightStore } from '@/stores/flightStore';
 import { getPairedBatteryDisplayName, useBatteryPairIndex } from '@/lib/batteryPairs';
+import { buildHtmlReport, type HtmlReportFieldConfig, type FlightReportData } from '@/lib/htmlReportBuilder';
+import { fetchFlightWeather } from '@/lib/weather';
 
 interface FlightStatsProps {
   data: FlightDataResponse;
@@ -31,6 +34,7 @@ export function FlightStats({ data }: FlightStatsProps) {
   const { unitPrefs, locale, dateLocale, appLanguage, getBatteryDisplayName, getDroneDisplayName, addTag, removeTag, allTags, getDisplaySerial, timeFormat } = useFlightStore();
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [showHtmlReportModal, setShowHtmlReportModal] = useState(false);
   const [isWeatherOpen, setIsWeatherOpen] = useState(false);
   const [isAddingTag, setIsAddingTag] = useState(false);
   const [newTagValue, setNewTagValue] = useState('');
@@ -106,6 +110,7 @@ export function FlightStats({ data }: FlightStatsProps) {
       { id: 'gpx', label: 'flightList.gpx', extension: 'gpx' },
       { id: 'kml', label: 'flightList.kml', extension: 'kml' },
       { id: 'kml_relative', label: 'flightList.kmlRelative', extension: 'kml' },
+      { id: 'html_report', label: 'flightList.htmlReport', extension: 'html' },
     ],
     []
   );
@@ -156,6 +161,81 @@ export function FlightStats({ data }: FlightStatsProps) {
       }
     } catch (error) {
       console.error('Export failed:', error);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleHtmlReportExport = async (config: {
+    documentTitle: string;
+    pilotName: string;
+    fieldConfig: HtmlReportFieldConfig;
+  }) => {
+    setShowHtmlReportModal(false);
+    setIsExporting(true);
+    try {
+      const baseName = (flight.displayName || flight.fileName || 'flight')
+        .replace(/[^a-z0-9-_]+/gi, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 80);
+      const now = new Date();
+      const pad2 = (n: number) => String(n).padStart(2, '0');
+      const defaultFileName = `${baseName || 'flight'}_Report_${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}_${pad2(now.getHours())}-${pad2(now.getMinutes())}-${pad2(now.getSeconds())}.html`;
+
+      // Fetch full-resolution data for the report
+      const fullData: FlightDataResponse = await getFlightData(flight.id, 999999999);
+
+      // Check if any weather fields are enabled
+      const weatherFields: (keyof HtmlReportFieldConfig)[] = [
+        'temperature', 'windSpeed', 'windGusts', 'humidity',
+        'cloudCover', 'precipitation', 'pressure', 'weatherCondition',
+      ];
+      const needsWeather = weatherFields.some((f) => config.fieldConfig[f]);
+
+      let weather = null;
+      if (needsWeather) {
+        const lat = flight.homeLat ?? fullData.telemetry.latitude?.find((v) => v !== null) ?? null;
+        const lon = flight.homeLon ?? fullData.telemetry.longitude?.find((v) => v !== null) ?? null;
+        if (lat != null && lon != null && flight.startTime) {
+          try {
+            weather = await fetchFlightWeather(lat as number, lon as number, flight.startTime);
+          } catch {
+            // Weather fetch failed; leave as null
+          }
+        }
+      }
+
+      const reportData: FlightReportData[] = [{
+        flight,
+        data: fullData,
+        weather,
+        getDroneDisplayName,
+        getBatteryDisplayName,
+        getDisplaySerial,
+      }];
+
+      const htmlContent = buildHtmlReport(reportData, {
+        documentTitle: config.documentTitle,
+        pilotName: config.pilotName,
+        fieldConfig: config.fieldConfig,
+        unitPrefs,
+        locale,
+        dateLocale,
+        appLanguage,
+        timeFormat,
+        t,
+      });
+
+      if (isWebMode()) {
+        downloadFile(defaultFileName, htmlContent, 'text/html');
+      } else {
+        await saveTextWithDialog(defaultFileName, htmlContent, [
+          { name: 'HTML', extensions: ['html'] },
+        ]);
+      }
+    } catch (error) {
+      console.error('HTML report export failed:', error);
     } finally {
       setIsExporting(false);
     }
@@ -398,7 +478,11 @@ export function FlightStats({ data }: FlightStatsProps) {
                     type="button"
                     onClick={() => {
                       setIsExportOpen(false);
-                      handleExport(option.id, option.extension);
+                      if (option.id === 'html_report') {
+                        setShowHtmlReportModal(true);
+                      } else {
+                        handleExport(option.id, option.extension);
+                      }
                     }}
                     className="themed-select-option w-full text-left px-3 py-2 text-xs rounded-lg transition-colors"
                   >
@@ -423,6 +507,14 @@ export function FlightStats({ data }: FlightStatsProps) {
           speedUnit={unitPrefs.speed}
         />
       )}
+
+      {/* HTML Report Modal */}
+      <HtmlReportModal
+        isOpen={showHtmlReportModal}
+        onClose={() => setShowHtmlReportModal(false)}
+        onGenerate={handleHtmlReportExport}
+        flightCount={1}
+      />
     </div>
   );
 }

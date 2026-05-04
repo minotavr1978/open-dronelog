@@ -375,9 +375,9 @@ export function EmailSignatureModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm mobile-safe-container">
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center p-4 overflow-y-auto bg-black/70 backdrop-blur-sm mobile-safe-container">
       <div
-        className={`${isLight ? 'bg-white border-gray-200' : 'bg-drone-surface border-gray-700'} border rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl max-h-[90vh] modal-mobile-max overflow-y-auto`}
+        className={`${isLight ? 'bg-white border-gray-200' : 'bg-drone-surface border-gray-700'} border rounded-xl p-6 max-w-lg w-full mx-4 shadow-2xl max-h-[90vh] modal-mobile-max overflow-y-auto my-auto`}
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-5">

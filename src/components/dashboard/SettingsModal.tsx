@@ -648,15 +648,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 overflow-y-auto mobile-safe-container">
+    <div className="fixed inset-0 z-[60] flex flex-col items-center p-4 overflow-y-auto mobile-safe-container">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={isBusy ? undefined : onClose}
       />
 
-      {/* Modal - use grid to handle overflow properly */}
-      <div className="relative bg-drone-secondary rounded-xl border border-gray-700 shadow-2xl w-full max-w-[845px] max-h-[calc(100vh-2rem)] modal-mobile-max grid grid-rows-[auto_1fr]">
+      {/* Modal - use flex-col and my-auto to handle overflow properly */}
+      <div className="relative bg-drone-secondary rounded-xl border border-gray-700 shadow-2xl w-full max-w-[845px] max-h-[calc(100vh-2rem)] modal-mobile-max flex flex-col my-auto">
         {/* Blocking overlay while a long-running operation is in progress */}
         {isBusy && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/90 dark:bg-black/60 backdrop-blur-[2px] rounded-xl">
@@ -710,7 +710,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         )}
 
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
+        <div className="shrink-0 flex items-center justify-between p-4 border-b border-gray-700">
           <h2 className="text-lg font-semibold text-white">{t('settings.title')}</h2>
           <button
             onClick={onClose}
@@ -724,10 +724,10 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
 
         {/* Content — two columns - scrollable area */}
-        <div className="p-4 overflow-y-auto min-h-0 settings-scroll">
-          <div className="flex flex-col md:flex-row gap-6 md:gap-0">
+        <div className="flex-1 p-4 overflow-y-auto min-h-0 settings-scroll">
+          <div className="flex flex-col lg:flex-row gap-6 lg:gap-0">
             {/* Left Column: Preferences & API Key */}
-            <div className="md:w-1/2 space-y-4 md:pr-5">
+            <div className="lg:w-1/2 space-y-4 lg:pr-5">
               {/* Units + Theme + Time Format — stack on mobile */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {/* Units — custom dropdown with per-dimension toggles inside */}
@@ -912,7 +912,6 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       { value: 'zh', label: '中文' },
                       { value: 'ja', label: '日本語' },
                       { value: 'ko', label: '한국어' },
-                      { value: 'uk', label: 'Українська' },
                     ]}
                   />
                 </div>
@@ -1442,12 +1441,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
 
             {/* Vertical Divider */}
-            <div className="hidden md:block w-px bg-gray-700 shrink-0" />
+            <div className="hidden lg:block w-px bg-gray-700 shrink-0" />
             {/* Horizontal Divider for mobile */}
-            <div className="md:hidden h-px w-full bg-gray-700 shrink-0" />
+            <div className="lg:hidden h-px w-full bg-gray-700 shrink-0" />
 
             {/* Right Column: Donation, Support, Info & Data */}
-            <div className="md:w-1/2 space-y-4 md:pl-5">
+            <div className="lg:w-1/2 space-y-4 lg:pl-5">
               {/* Donation Status */}
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
@@ -1833,7 +1832,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
       {/* Manage Sync Blacklist Modal */}
       {isBlacklistModalOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[70] flex flex-col items-center p-4 overflow-y-auto">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => {
@@ -1842,7 +1841,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               }
             }}
           />
-          <div className={`relative w-full max-w-3xl rounded-xl border shadow-2xl h-[min(88vh,760px)] max-h-[min(88vh,760px)] grid grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden ${isLight ? 'bg-white border-gray-300' : 'bg-drone-secondary border-gray-700'}`}>
+          <div className={`relative w-full max-w-3xl rounded-xl border shadow-2xl h-[min(88vh,760px)] max-h-[min(88vh,760px)] grid grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden my-auto ${isLight ? 'bg-white border-gray-300' : 'bg-drone-secondary border-gray-700'}`}>
             <div className={`flex items-center justify-between px-4 py-3 border-b ${isLight ? 'border-gray-200' : 'border-gray-700'}`}>
               <div>
                 <h3 className={`text-base font-semibold ${isLight ? 'text-gray-900' : 'text-white'}`}>
@@ -1969,12 +1968,12 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
       {/* Supporter Badge Activation Modal */}
       {showBadgeModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+        <div className="fixed inset-0 z-[60] flex flex-col items-center p-4 overflow-y-auto">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setShowBadgeModal(false)}
           />
-          <div className="relative bg-drone-secondary rounded-xl border border-gray-700 shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+          <div className="relative bg-drone-secondary rounded-xl border border-gray-700 shadow-2xl w-full max-w-sm mx-4 overflow-hidden my-auto">
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-700">
               <h3 className="text-base font-semibold text-white flex items-center gap-2">

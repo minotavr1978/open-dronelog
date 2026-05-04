@@ -83,14 +83,14 @@ export function WeatherModal({ isOpen, onClose, lat, lon, startTime, temperature
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center mobile-safe-container">
+    <div className="fixed inset-0 z-[100] flex flex-col items-center p-4 overflow-y-auto mobile-safe-container">
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
-      <div className="relative bg-drone-secondary rounded-xl border border-gray-700 shadow-2xl w-full max-w-sm mx-4 overflow-hidden modal-mobile-max">
+      <div className="relative bg-drone-secondary rounded-xl border border-gray-700 shadow-2xl w-full max-w-sm mx-4 overflow-hidden modal-mobile-max flex flex-col my-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
+        <div className="shrink-0 flex items-center justify-between p-4 border-b border-gray-700">
           <div className="flex items-center gap-2">
             <img src={weatherIcon} alt="Weather" className="w-5 h-5" />
             <h2 className="text-lg font-semibold text-white">{t('weather.title')}</h2>
@@ -106,7 +106,7 @@ export function WeatherModal({ isOpen, onClose, lat, lon, startTime, temperature
         </div>
 
         {/* Body */}
-        <div className="p-5">
+        <div className="flex-1 p-5 min-h-0 overflow-y-auto">
           {loading && (
             <div className="flex flex-col items-center justify-center py-10">
               <svg className="w-8 h-8 text-sky-400 animate-spin" viewBox="0 0 24 24" fill="none">
