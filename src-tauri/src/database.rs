@@ -307,7 +307,7 @@ impl Database {
             -- KEYCHAIN TABLE: Store cached decryption keys for V13+ logs
             -- ============================================================
             CREATE TABLE IF NOT EXISTS keychains (
-                serial_number   VARCHAR PRIMARY KEY,
+                file_hash       VARCHAR PRIMARY KEY,
                 encryption_key  VARCHAR NOT NULL,
                 fetched_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
@@ -390,6 +390,7 @@ impl Database {
         Self::migrate_telemetry_table(&conn)?;
         Self::migrate_flight_tags_table(&conn)?;
         Self::migrate_flight_messages_table(&conn)?;
+        Self::migrate_keychains_table(&conn)?;
 
         // Run type optimization migration (DOUBLE -> FLOAT for non-critical metrics)
         // Must run before column order check since it recreates the table
@@ -577,6 +578,32 @@ impl Database {
         )?;
 
         log::info!("flight_messages PK migration complete");
+        Ok(())
+    }
+
+    /// Migrate keychains table - change PK from serial_number to file_hash
+    fn migrate_keychains_table(conn: &Connection) -> Result<(), DatabaseError> {
+        let has_serial_number: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM information_schema.columns WHERE table_name = 'keychains' AND column_name = 'serial_number'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+            
+        if has_serial_number {
+            log::info!("Migrating keychains table: replacing serial_number with file_hash PK");
+            conn.execute_batch(
+                r#"
+                DROP TABLE keychains;
+                CREATE TABLE keychains (
+                    file_hash       VARCHAR PRIMARY KEY,
+                    encryption_key  VARCHAR NOT NULL,
+                    fetched_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+                "#,
+            )?;
+        }
         Ok(())
     }
 
@@ -2505,6 +2532,46 @@ impl Database {
         );
 
         Ok(total_removed)
+    }
+
+    /// Retrieve cached keychain for a log file by its SHA-256 hash.
+    /// Returns the deserialized keychain data if found, or `None` if not cached
+    /// or if deserialization fails (corrupt cache row is treated as a miss).
+    pub fn get_cached_keychain(&self, file_hash: &str) -> Result<Option<Vec<Vec<dji_log_parser::keychain::KeychainFeaturePoint>>>, DatabaseError> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT encryption_key FROM keychains WHERE file_hash = ?")?;
+        
+        let mut rows = stmt.query(params![file_hash])?;
+        if let Some(row) = rows.next()? {
+            let json_str: String = row.get(0)?;
+            match serde_json::from_str(&json_str) {
+                Ok(keychains) => {
+                    log::debug!("Found cached keychain for file_hash: {}", file_hash);
+                    Ok(Some(keychains))
+                }
+                Err(e) => {
+                    log::warn!("Failed to deserialize cached keychain for file_hash: {}: {}", file_hash, e);
+                    Ok(None)
+                }
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Save fetched keychain data to the local cache, keyed by the log file's SHA-256 hash.
+    /// The keychain is serialized as JSON. Overwrites any existing entry for the same hash.
+    pub fn save_cached_keychain(&self, file_hash: &str, keychains: &[Vec<dji_log_parser::keychain::KeychainFeaturePoint>]) -> Result<(), DatabaseError> {
+        let conn = self.conn.lock().unwrap();
+        let json_str = serde_json::to_string(keychains).map_err(|e| DatabaseError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())))?;
+        
+        conn.execute(
+            "INSERT OR REPLACE INTO keychains (file_hash, encryption_key) VALUES (?, ?)",
+            params![file_hash, json_str],
+        )?;
+        
+        log::debug!("Saved keychain to cache for file_hash: {}", file_hash);
+        Ok(())
     }
 
     /// Get a setting value by key

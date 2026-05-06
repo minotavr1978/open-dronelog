@@ -377,7 +377,7 @@ impl<'a> LogParser<'a> {
         );
 
         // Check if we need an encryption key for V13+ logs
-        let (frames, used_djifly_fallback, component_serials) = self.get_frames(&parser).await?;
+        let (frames, used_djifly_fallback, component_serials) = self.get_frames(&parser, file_hash).await?;
         log::info!("Extracted {} frames from log", frames.len());
 
         // Log when ComponentSerial provides a longer serial than the header
@@ -879,29 +879,40 @@ impl<'a> LogParser<'a> {
     /// to prevent panics from crashing the application.
     /// Returns (frames, used_djifly_fallback) where used_djifly_fallback indicates
     /// if the DJIFly department override was needed (third-party app like Dronelink).
-    async fn get_frames(&self, parser: &DJILog) -> Result<(Vec<Frame>, bool, ComponentSerials), ParserError> {
+    async fn get_frames(&self, parser: &DJILog, file_hash: &str) -> Result<(Vec<Frame>, bool, ComponentSerials), ParserError> {
         // Version 13+ requires keychains for decryption
         let (keychains, used_djifly_fallback) = if parser.version >= 13 {
-            let api_key = self.api.get_api_key().ok_or(ParserError::EncryptionKeyRequired)?;
-            
-            // Try standard keychain fetch first
-            match self.fetch_keychains_reqwest(parser, &api_key, None).await {
-                Ok(kc) => (Some(kc), false),
-                Err(e) => {
-                    // Standard fetch failed — try fallback for third-party apps (Dronelink, DroneDeploy)
-                    // These apps write non-standard metadata that causes DJI API to reject keychains.
-                    // Solution: Override department to DJIFly (3) and use log's default app version.
-                    log::warn!(
-                        "Standard keychain fetch failed: {}. Retrying with DJIFly department override for third-party app compatibility...",
-                        e
-                    );
+            // First check database cache
+            match self.db.get_cached_keychain(file_hash) {
+                Ok(Some(cached_kc)) => {
+                    log::info!("Using cached keychain for log file {}", file_hash);
+                    (Some(cached_kc), false)
+                }
+                _ => {
+                    let api_key = self.api.get_api_key().ok_or(ParserError::EncryptionKeyRequired)?;
                     
-                    let kc = self.fetch_keychains_reqwest(parser, &api_key, Some(Department::DJIFly)).await.map_err(|e| {
-                        ParserError::Api(format!("Keychain fetch failed (both standard and DJIFly fallback): {}", e))
-                    })?;
+                    // Try standard keychain fetch first
+                    let (kc, used_fallback) = match self.fetch_keychains_reqwest(parser, &api_key, None).await {
+                        Ok(kc) => (kc, false),
+                        Err(e) => {
+                            // Standard fetch failed — try fallback for third-party apps
+                            log::warn!("Standard keychain fetch failed: {}. Retrying with DJIFly department override...", e);
+                            
+                            let fallback_kc = self.fetch_keychains_reqwest(parser, &api_key, Some(Department::DJIFly)).await.map_err(|e| {
+                                ParserError::Api(format!("Keychain fetch failed (both standard and DJIFly fallback): {}", e))
+                            })?;
+                            
+                            log::info!("Successfully fetched keychains using DJIFly department override");
+                            (fallback_kc, true)
+                        }
+                    };
                     
-                    log::info!("Successfully fetched keychains using DJIFly department override");
-                    (Some(kc), true)
+                    // Save the successfully fetched keychain to cache
+                    if let Err(e) = self.db.save_cached_keychain(file_hash, &kc) {
+                        log::warn!("Failed to save fetched keychain to cache: {}", e);
+                    }
+                    
+                    (Some(kc), used_fallback)
                 }
             }
         } else {

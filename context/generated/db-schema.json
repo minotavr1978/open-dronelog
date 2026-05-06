@@ -1,5 +1,5 @@
 {
-  "sourceFingerprint": "23f5f413664257317790abb87de765e3aa6620349f3b18e480920de6f5629bd0",
+  "sourceFingerprint": "de8e548ec9688eb24c6155798f0258dd9c2a02fe2541c361b3b4bfb1c8c20a80",
   "sourceFile": "src-tauri/src/database.rs",
   "tables": [
     {
@@ -248,7 +248,7 @@
       "name": "keychains",
       "columns": [
         {
-          "name": "serial_number",
+          "name": "file_hash",
           "type": "VARCHAR PRIMARY KEY"
         },
         {
