@@ -14,7 +14,7 @@ import zh from './locales/zh.json';
 import ko from './locales/ko.json';
 import hu from './locales/hu.json';
 import tr from './locales/tr.json';
-
+import uk from './locales/uk.json';
 /**
  * Map BCP-47 locale codes (as stored in the flight store) to i18next language keys.
  * For example both 'en-GB' and 'en-US' resolve to the 'en' translation bundle.
@@ -34,6 +34,7 @@ export const localeToLang: Record<string, string> = {
   'ko-KR': 'ko',
   'hu-HU': 'hu',
   'tr-TR': 'tr',
+  'uk-UA': 'uk',
 };
 
 const savedLang = localStorage.getItem('appLanguage') || 'en';
@@ -54,6 +55,7 @@ i18n.use(initReactI18next).init({
     ko: { translation: ko },
     hu: { translation: hu },
     tr: { translation: tr },
+    uk: { translation: uk },
   },
   lng: initialLang,
   fallbackLng: 'en',
