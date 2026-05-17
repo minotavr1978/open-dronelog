@@ -29,5 +29,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git checkout main
-          git merge upstream/main --no-edit
-          git push origin main
+          git merge upstream/main --no-edit --no-commit
+          git checkout --ours .github/workflows || true
+          git add .
+          git commit -m "Sync upstream changes" || echo "No changes to commit"
